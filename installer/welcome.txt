@@ -1,0 +1,5 @@
+OrthoStreamXP shows aerial photos as the ground in X-Plane 12, downloaded and built as you fly.
+
+This beta needs WinFsp (winfsp.dev), X-Plane 12 and scenery base packages of your own. Install WinFsp first. After installing, restart your computer: WinFsp works only after a restart. OrthoStreamXP's first start then checks everything and helps you set it up.
+
+Your settings, logs and flight history are kept apart from the program, so updating or reinstalling never touches them.

@@ -1,0 +1,57 @@
+<UserControl x:Class="OrthoStreamXP.Gui.AboutView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:ClassModifier="internal">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="36,28,36,36" MaxWidth="900">
+            <StackPanel Orientation="Horizontal">
+                <Image Source="pack://application:,,,/orthostreamxp.png" Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality" />
+                <StackPanel Margin="18,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="OrthoStreamXP" Style="{StaticResource PageTitle}" Margin="0" />
+                    <TextBlock Style="{StaticResource Secondary}">
+                        <Run Text="Version" /> <Run Text="{Binding Version, Mode=OneWay}" />
+                    </TextBlock>
+                </StackPanel>
+            </StackPanel>
+
+            <TextBlock Style="{StaticResource Secondary}" Margin="0,20,0,0"
+                       Text="OrthoStreamXP puts aerial photos into your X-Plane 12 scenery packages as you fly. It downloads the pictures from Bing and Esri, turns them into X-Plane textures and shows them to X-Plane through WinFsp. Your packages on disk are never changed." />
+
+            <TextBlock Text="This PC" Style="{StaticResource SectionTitle}" />
+            <Border Style="{StaticResource RowCard}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="WinFsp" />
+                        <TextBlock Text="{Binding WinFspStatus}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="Get WinFsp" Command="{Binding GetWinFsp}" VerticalAlignment="Center"
+                            Visibility="{Binding WinFspMissing, Converter={StaticResource Visible}}" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource RowCard}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                        <TextBlock Text="Settings file" />
+                        <TextBlock Text="{Binding SettingsFile}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="Show the file" Command="{Binding OpenSettingsFile}" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+            <TextBlock Text="Pictures" Style="{StaticResource SectionTitle}" />
+            <Border Style="{StaticResource RowCard}">
+                <TextBlock TextWrapping="Wrap" VerticalAlignment="Center"
+                           Text="Pictures © Microsoft (Bing Maps) and © Esri and its data providers (World Imagery); orthophoto of Poland from Geoportal, © Główny Urząd Geodezji i Kartografii (geoportal.gov.pl). Use them in your own simulator only, and follow the providers' terms of use." />
+            </Border>
+
+            <Button Content="Project page on GitHub" Style="{StaticResource LinkButton}" Command="{Binding OpenProject}" Margin="2,20,0,0" HorizontalAlignment="Left" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/OrthoStreamXP/OrthoStreamXP.csproj" />
+  <Project Path="tests/OrthoStreamXP.Tests/OrthoStreamXP.Tests.csproj" />
+</Solution>

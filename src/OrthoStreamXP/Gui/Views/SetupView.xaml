@@ -1,0 +1,294 @@
+<UserControl x:Class="OrthoStreamXP.Gui.SetupView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:ClassModifier="internal">
+    <UserControl.Resources>
+        <DataTemplate x:Key="FolderChoice">
+            <RadioButton Style="{StaticResource ChoiceCard}" IsChecked="{Binding IsSelected, Mode=TwoWay}" AutomationProperties.Name="{Binding Path}">
+                <StackPanel>
+                    <TextBlock Text="{Binding Path}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Description}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                </StackPanel>
+            </RadioButton>
+        </DataTemplate>
+        <DataTemplate x:Key="PresetChoice">
+            <RadioButton Style="{StaticResource ChoiceCard}" IsChecked="{Binding IsSelected, Mode=TwoWay}" AutomationProperties.Name="{Binding Title}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" />
+                        <Border Style="{StaticResource Badge}" Visibility="{Binding IsRecommended, Converter={StaticResource Visible}}">
+                            <TextBlock Text="Recommended" />
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="{Binding RecommendedReason}" Style="{StaticResource Caption}" Margin="0,2,0,0"
+                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                               Visibility="{Binding RecommendedReason, Converter={StaticResource Visible}}" />
+                    <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                    <TextBlock Text="{Binding Details}" Style="{StaticResource Caption}" Margin="0,4,0,0" />
+                    <TextBlock Text="{Binding MemoryText}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0" Visibility="{Binding MemoryWarning, Converter={StaticResource Visible}}">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="14" VerticalAlignment="Top" Margin="0,1,8,0"
+                                   Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+                        <TextBlock Text="{Binding MemoryWarning}" TextWrapping="Wrap" MaxWidth="560" Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+                    </StackPanel>
+                </StackPanel>
+            </RadioButton>
+        </DataTemplate>
+        <Style x:Key="StepPanel" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Collapsed" />
+        </Style>
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="24" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="{DynamicResource LayerFillColorDefaultBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Title -->
+        <StackPanel Orientation="Horizontal" Margin="36,24,36,0">
+            <Image Source="pack://application:,,,/orthostreamxp.png" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality" />
+            <TextBlock Text="Set up OrthoStreamXP" FontSize="20" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <!-- Where you are -->
+        <ItemsControl Grid.Row="1" ItemsSource="{Binding Steps}" Margin="36,20,36,0" Focusable="False">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Rows="1" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Margin="0,0,8,0">
+                        <Rectangle x:Name="Bar" Height="3" RadiusX="1.5" RadiusY="1.5" Fill="{DynamicResource ControlStrongFillColorDisabledBrush}" />
+                        <TextBlock x:Name="Label" Margin="0,8,0,0" Foreground="{DynamicResource TextFillColorTertiaryBrush}">
+                            <Run Text="{Binding Number, Mode=OneWay}" /><Run Text=". " /><Run Text="{Binding Title, Mode=OneWay}" />
+                        </TextBlock>
+                    </StackPanel>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding Done}" Value="True">
+                            <Setter TargetName="Bar" Property="Fill" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                            <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Current}" Value="True">
+                            <Setter TargetName="Bar" Property="Fill" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                            <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <Setter TargetName="Label" Property="FontWeight" Value="SemiBold" />
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,24,0,0">
+            <Grid Margin="36,0,36,24" MaxWidth="760" HorizontalAlignment="Left">
+                <!-- 1. Welcome -->
+                <StackPanel>
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel" BasedOn="{StaticResource StepPanel}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Step}" Value="0"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="Welcome" Style="{StaticResource Heading}" />
+                    <TextBlock Style="{StaticResource Secondary}"
+                               Text="OrthoStreamXP puts aerial photos into your X-Plane 12 photo scenery while you fly. This short setup checks your PC and asks where things are." />
+                    <TextBlock Text="You need" Style="{StaticResource SectionTitle}" />
+                    <Border Style="{StaticResource RowCard}">
+                        <StackPanel>
+                            <TextBlock Text="• X-Plane 12" />
+                            <TextBlock Text="• X-Plane scenery packages of your own to fill with pictures (each a folder with an Earth nav data folder), all in one folder" Margin="0,4,0,0" TextWrapping="Wrap" />
+                            <TextBlock Text="• An internet connection, and a few GB of disk for each area you fly" Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource RowCard}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock FontSize="18" Margin="0,0,14,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                        <Setter Property="Text" Value="&#xE7BA;" />
+                                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding WinFspOk}" Value="True">
+                                                <Setter Property="Text" Value="&#xE73E;" />
+                                                <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="WinFsp" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding WinFspText}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                                        Visibility="{Binding WinFspOk, Converter={StaticResource Visible}, ConverterParameter=Invert}">
+                                <Button Content="Get WinFsp" Command="{Binding GetWinFsp}" Style="{DynamicResource AccentButtonStyle}" Margin="16,0,0,0" />
+                                <Button Content="Check again" Command="{Binding CheckWinFsp}" Margin="8,0,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <!-- 2. X-Plane -->
+                <StackPanel>
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel" BasedOn="{StaticResource StepPanel}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Step}" Value="1"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="Where is X-Plane?" Style="{StaticResource Heading}" />
+                    <TextBlock Style="{StaticResource Secondary}" Margin="0,0,0,16" Text="{Binding XPlaneHint}" />
+                    <ItemsControl ItemsSource="{Binding XPlaneOptions}" ItemTemplate="{StaticResource FolderChoice}" Focusable="False" />
+                    <Button Content="Choose another folder…" Command="{Binding BrowseXPlane}" HorizontalAlignment="Left" Margin="0,6,0,0" />
+                </StackPanel>
+
+                <!-- 3. Scenery packages -->
+                <StackPanel>
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel" BasedOn="{StaticResource StepPanel}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Step}" Value="2"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="Where are your scenery packages?" Style="{StaticResource Heading}" />
+                    <TextBlock Style="{StaticResource Secondary}" Margin="0,0,0,16"
+                               Text="Choose the folder that holds your scenery packages. Each package is a folder with an Earth nav data folder in it; OrthoStreamXP shows every one it finds in X-Plane, with the pictures added." />
+                    <ItemsControl ItemsSource="{Binding PackageOptions}" ItemTemplate="{StaticResource FolderChoice}" Focusable="False" />
+                    <Button Content="Choose a folder…" Command="{Binding BrowsePackages}" HorizontalAlignment="Left" Margin="0,6,0,0" />
+                    <TextBlock Text="{Binding PackagesHint}" Margin="0,12,0,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Secondary}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding PackagesWrong}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+
+                <!-- 4. Cache -->
+                <StackPanel>
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel" BasedOn="{StaticResource StepPanel}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Step}" Value="3"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="Where should OrthoStreamXP keep its textures?" Style="{StaticResource Heading}" />
+                    <TextBlock Style="{StaticResource Secondary}" Margin="0,0,0,16"
+                               Text="OrthoStreamXP keeps the pictures it downloads and the textures it builds in this folder, so places you fly again load at once. A fast SSD with plenty of free space is best. You can change it later in Settings." />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Text="{Binding CacheFolder, UpdateSourceTrigger=PropertyChanged, Delay=300}" AutomationProperties.Name="Cache folder" />
+                        <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseCache}" Margin="8,0,0,0" />
+                    </Grid>
+                    <TextBlock Text="{Binding CacheHint}" Margin="0,12,0,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Secondary}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CacheWrong}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+
+                <!-- 5. Quality -->
+                <StackPanel>
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel" BasedOn="{StaticResource StepPanel}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Step}" Value="4"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="How sharp should the ground be?" Style="{StaticResource Heading}" />
+                    <TextBlock Style="{StaticResource Secondary}" Margin="0,0,0,16" Text="Sharper pictures take longer to download. You can change this at any time in Settings." />
+                    <Border Style="{StaticResource RowCard}" DataContext="{Binding ConnectionTest}" Margin="0,0,0,12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,24,0">
+                                <TextBlock Text="Not sure? Test your connection" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
+                                           Text="OrthoStreamXP downloads real pictures for about 30 seconds, recommends the quality your connection can keep up with, and sets how many downloads run at once." />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                           Text="Speeds change during the day: you can test again later in Settings, a few times at different hours, and choose a number in the middle." />
+                                <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding Status}"
+                                           Visibility="{Binding Status, Converter={StaticResource Visible}}" />
+                            </StackPanel>
+                            <Button Grid.Column="1" VerticalAlignment="Center" Content="{Binding RunText}" Command="{Binding Run}" Padding="12,4"
+                                    AutomationProperties.Name="Test your connection" />
+                        </Grid>
+                    </Border>
+                    <ItemsControl ItemsSource="{Binding Presets}" ItemTemplate="{StaticResource PresetChoice}" Focusable="False" />
+                </StackPanel>
+
+                <!-- 6. Ready -->
+                <StackPanel>
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel" BasedOn="{StaticResource StepPanel}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Step}" Value="5"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="All set" Style="{StaticResource Heading}" />
+                    <TextBlock Style="{StaticResource Secondary}" Margin="0,0,0,16"
+                               Text="Each time you fly, start OrthoStreamXP first and then X-Plane, so X-Plane finds the photo scenery." />
+                    <Border Style="{StaticResource Card}">
+                        <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" LineHeight="22" />
+                    </Border>
+                    <CheckBox Content="Start OrthoStreamXP now" IsChecked="{Binding StartNow}" Margin="0,16,0,0" />
+                    <TextBlock Text="{Binding Error}" Foreground="{DynamicResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" Margin="0,12,0,0"
+                               Visibility="{Binding Error, Converter={StaticResource Visible}}" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- Buttons -->
+        <Border Grid.Row="3" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Padding="36,16">
+            <Grid>
+                <Button Content="Cancel" Command="{Binding Cancel}" HorizontalAlignment="Left"
+                        Visibility="{Binding IsRerun, Converter={StaticResource Visible}}" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Back" Command="{Binding Back}" MinWidth="100" />
+                    <Button Content="Next" Command="{Binding Next}" MinWidth="120" Margin="8,0,0,0" Style="{DynamicResource AccentButtonStyle}" IsDefault="True"
+                            Visibility="{Binding IsLastStep, Converter={StaticResource Visible}, ConverterParameter=Invert}" />
+                    <Button Content="Finish" Command="{Binding Finish}" MinWidth="120" Margin="8,0,0,0" Style="{DynamicResource AccentButtonStyle}"
+                            Visibility="{Binding IsLastStep, Converter={StaticResource Visible}}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

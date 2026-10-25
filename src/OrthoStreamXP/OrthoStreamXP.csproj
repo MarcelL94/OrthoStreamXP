@@ -1,0 +1,83 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <AssemblyName>orthostreamxp</AssemblyName>
+    <RootNamespace>OrthoStreamXP</RootNamespace>
+    <Version>0.3.0</Version>
+    <ApplicationIcon>orthostreamxp.ico</ApplicationIcon>
+    <!-- The program is the window; app.manifest keeps Explorer from opening a console. -->
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- WPF's Windows 11 (Fluent) theme is marked experimental. -->
+    <NoWarn>$(NoWarn);WPF0001</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- "dotnet publish" produces one orthostreamxp.exe (the .NET 10 runtime is still required). -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <DebugType>embedded</DebugType>
+    <!-- WinFsp installs its managed API next to the native DLLs; override with -p:WinFspDir=... if needed. -->
+    <WinFspDir Condition="'$(WinFspDir)' == ''">$(MSBuildProgramFiles32)\WinFsp</WinFspDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Image decoding only (JPEG/PNG tiles); resizing and BC1 encoding are our own code. -->
+    <PackageReference Include="SkiaSharp" Version="4.153.1" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Only the example is shipped, so publishing never overwrites the user's orthostreamxp.ini. -->
+    <None Update="orthostreamxp.example.ini" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="orthostreamxp.ico" />
+    <Resource Include="orthostreamxp.png" />
+    <!-- City names for the maps: Natural Earth's populated places (public domain). -->
+    <EmbeddedResource Include="Gui\Map\cities.csv" LogicalName="OrthoStreamXP.cities.csv" />
+    <!-- WPF projects leave these out of the implicit usings; the engine uses them everywhere. -->
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="winfsp-msil">
+      <HintPath>$(WinFspDir)\bin\winfsp-msil.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OrthoStreamXP.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Every decoded tile (196 KB) and build picture (up to 64 MB) is a large object, which .NET does not move by default:
+      a flight's hundreds of thousands of them among the long-lived cached ones can leave the heap mostly free gaps
+      (a 4-8 GB heap was seen with about 1 GB of textures held) that X-Plane cannot have. ConserveMemory compacts the
+      large objects when the gaps grow.
+    -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
+
+  <!--
+    Keep the publish folder to the exe, WinFsp's managed DLL and the example settings: no SkiaSharp native
+    symbols (~96 MB) or WinFsp API docs. winfsp-msil.dll stays a separate file because it checks its own
+    file version at start-up, which fails inside a single-file bundle (its location is empty there).
+  -->
+  <Target Name="ShapePublishFolder" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.pdb' or '%(Extension)' == '.xml'" />
+      <ResolvedFileToPublish Condition="'%(Filename)' == 'winfsp-msil'">
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+
+</Project>

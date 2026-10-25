@@ -1,0 +1,9 @@
+bin/
+obj/
+publish/
+*.user
+.vs/
+temp_scripts/
+artifacts/
+TestResults/
+.vscode

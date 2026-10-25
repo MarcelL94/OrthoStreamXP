@@ -1,0 +1,1 @@
+OrthoStreamXP is installed. Restart your computer before the first start: WinFsp works only after a restart. Then start OrthoStreamXP from the Start menu: the first time, a short setup checks WinFsp, finds X-Plane 12 and your scenery packages, and helps you choose the quality.

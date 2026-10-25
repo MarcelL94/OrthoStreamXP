@@ -1,0 +1,101 @@
+# Settings
+
+[User guide](README.md) › Settings
+
+The Settings page has six tabs. Changes are saved straight away, and a short **Saved** note confirms each one.
+
+Settings can be changed only while OrthoStreamXP is stopped. While the scenery is streaming, the page shows the settings in use but you cannot edit them: a banner says *Streaming is running. Stop it to change settings.* Click **Stop streaming** in the banner to stop it. Changes apply from the next start.
+
+At the bottom of every tab:
+
+- **Show the file** shows the settings file (`%LOCALAPPDATA%\OrthoStreamXP\orthostreamxp.ini`) in Explorer.
+- **Run the setup again** reopens the [first setup](first-setup.md).
+
+## Quality
+
+![Settings: Quality](images/settings-quality.png)
+
+Choose how sharp the ground is. Each preset comes with settings tested for it and keeps its own textures in the cache, so you can switch at any time without losing anything.
+
+| Preset | Textures | Imagery zoom | Ground detail | Best for |
+|---|---|---|---|---|
+| **Balanced** | 1024 px | 15, 16 near airports | ~6.8 m per pixel | High flying, a slower connection or little graphics memory |
+| **Sharp** | 2048 px | 16, 17 near airports | ~3.4 m per pixel | Everyday flying, approaches included |
+| **Ultra** | 4096 px | 17, 18 near airports | ~1.7 m per pixel | Low flight and GA, with plenty of graphics memory |
+| **Extra** | 4096 px | 17, 19 near airports | ~1.7 m per pixel | Low and slow flight and screenshots, on a fast connection |
+
+**Extra** is Ultra with the finest imagery (zoom 19) near airports, which often avoids clouds and other artefacts. Elsewhere it is the same as Ultra. Near airports it downloads four times as much as Ultra, and a new area takes a little longer to load: about 4 minutes, then sharp next to the aircraft.
+
+Each card shows the imagery zoom, the metres per pixel, roughly how long a new area takes to load, and how much graphics memory the photo textures take. Until you have flown, that memory figure comes from a test flight; after your first long flight, it is measured on your PC.
+
+- The **Recommended** badge marks the preset that suits your connection and graphics card, with the reason below it.
+- If a preset's photo textures plus X-Plane's own needs (about 5 GB) would be more than your graphics card has, its card shows a warning. X-Plane may then stutter or lower its texture detail; a smaller preset is safer.
+
+## Folders
+
+![Settings: Folders](images/settings-folders.png)
+
+- **X-Plane folder:** the X-Plane installation where the packages appear (in its `Custom Scenery` folder).
+- **Scenery packages folder:** the parent folder of your packages. The line below it lists the packages found.
+- **Cache folder:** where the textures are kept. The line below it shows the free space and how much a new area takes at the current texture size.
+
+## Pictures and download
+
+![Settings: Pictures and download](images/settings-download.png)
+
+- **Where the pictures come from:** the imagery source.
+  - *Bing, then Esri where Bing has no picture* (recommended): the sharpest pictures in most places.
+  - *Bing only*.
+  - *Geoportal in Poland (national orthophoto), Bing and Esri elsewhere*.
+- **Downloads at once:** how many pictures download in parallel, from 16 to 256. Your internet connection sets the real speed; beyond about 160, more downloads only wait longer. Lower this if other programs need the connection while you fly.
+- **Test my connection:** about 30 seconds and 30 MB of real picture tiles from your chosen source. It suggests a value for *Downloads at once* and the quality your connection can keep up with. When its suggestion differs from your setting, a **Use N at once** button applies it. The test cannot run while the scenery is streaming. Speeds change during the day, so test a few times at different hours and choose a number in the middle of the results.
+
+## Colours
+
+![Settings: Colours](images/settings-colours.png)
+
+### Preview
+
+The top of the tab shows a photo from your cache twice: **Before** (as downloaded) and **After** (as X-Plane will get it with the settings below). It updates as you change them, and **Another photo** picks a different one. The preview needs a cache folder with at least one flown area in it. It works while the scenery is streaming too.
+
+### Colour matching
+
+Aerial photos are a patchwork of pictures taken on different days, so one patch can look grey and hazy next to a bright green one.
+
+- **Even out the colours between photos** moves each place towards the colours usual in its area, so the patches stand out less. Fields keep their own colours.
+- **Strength** sets how far the colours move: 100 % is the full correction, and less keeps more of each photo's own look.
+
+### Seasons
+
+Most aerial photos are taken in summer.
+
+- **Colour the scenery for the season** changes the vegetation to match X-Plane's date and your location (southern hemisphere included):
+  - **Spring:** fresh green.
+  - **Autumn:** leaves turn yellow and rust.
+  - **Winter:** deciduous trees look bare and fields turn brown.
+  
+  Conifers, roofs, roads and water keep their colours, and snow is left to X-Plane's weather.
+- **Season:** *Automatic* follows X-Plane's date and the place; a new date takes effect from the next flight. You can also force one season everywhere: *Early spring*, *Spring*, *Summer* (the pictures as they are), *Early autumn*, *Autumn*, *Late autumn* or *Winter, without snow*.
+- **Strength:** how far the colours move towards the season. 100 % is the full change.
+
+### Exposure
+
+**Exposure** darkens photos that look too bright next to X-Plane's own scenery, like a camera's exposure. 100 % shows them as downloaded; 50 % is one stop darker.
+
+All the colour options only change how the photos look. The cache keeps the photos as downloaded, so changing them never downloads anything again.
+
+## Tuning
+
+![Settings: Tuning](images/settings-tuning.png)
+
+After flights of 10 minutes or more, Home may suggest settings for your preset (see [Flying › Tuning suggestions](flying.md#tuning-suggestions)). The tab lists each setting the tuning changed, with the preset's own value beside it. **Reset to defaults** puts every setting back to the preset's tested values and forgets what was tuned; it asks first. The folders, the picture source and *Downloads at once* stay as they are.
+
+## Other
+
+![Settings: Other](images/settings-other.png)
+
+- **Keep the photo scenery below airports and overlays:** at every start, moves the packages to the end of X-Plane's `scenery_packs.ini`, so airports and overlays draw on top of the photos. Leave it on unless you order that list yourself.
+- **X-Plane address:** needed only when X-Plane runs on another PC.
+- **X-Plane start options:** command-line options added when **Start and fly** starts X-Plane, for example `--allow_reshade`. They take effect the next time X-Plane starts.
+
+Next: [Cache](cache.md)

@@ -1,0 +1,18 @@
+using System.Globalization;
+using OrthoStreamXP.Gui;
+
+// The installer's hooks first: on install, update or uninstall Velopack runs them and ends the process here.
+Velopack.VelopackApp.Build().OnBeforeUninstallFastCallback(_ => OrthoStreamXP.Setup.Installation.BeforeUninstall()).Run();
+
+// The log, the settings file and the window's English text all use one number and date format, whatever
+// the PC's regional settings (WPF needs real culture data, so invariant globalization is not an option).
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
+CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
+
+// What earlier versions kept beside the program, or in the cache, moves to the app's folder before anything reads it.
+OrthoStreamXP.Setup.LegacyNames.MoveSettings(AppContext.BaseDirectory, OrthoStreamXP.Setup.AppPaths.Settings);
+OrthoStreamXP.Setup.LegacyNames.MoveCache(OrthoStreamXP.Setup.SettingsDocument.Load(OrthoStreamXP.Setup.AppPaths.Settings).Get("cache"),
+    OrthoStreamXP.Setup.AppPaths.Logs, OrthoStreamXP.Setup.AppPaths.History);
+Directory.CreateDirectory(OrthoStreamXP.Setup.AppPaths.History);
+
+return GuiHost.Run();

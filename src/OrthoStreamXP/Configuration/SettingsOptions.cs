@@ -1,0 +1,59 @@
+using OrthoStreamXP.Scenery;
+using OrthoStreamXP.Textures;
+
+namespace OrthoStreamXP;
+
+/// <summary>The settings OrthoStreamXP knows, as the names of orthostreamxp.ini's lines.</summary>
+internal static class SettingsOptions
+{
+    public const string DefaultSettingsFile = "orthostreamxp.ini";
+
+    public static readonly SettingsSchema Schema = new SettingsSchema()
+        .Add("source", "Existing scenery package folder (one package; or use base-packages)")
+        .Add("base-packages", @"Folder of scenery packages: every subfolder with Earth nav data is mounted in X-Plane's Custom Scenery under its own name. Needs xplane")
+        .Add("xplane", @"X-Plane folder: packages are mounted as Custom Scenery\<package name> (instead of mountpoint)")
+        .Add("scenery-packs", @"on or off: with xplane, move the mounted packages to the end of Custom Scenery\scenery_packs.ini (lowest priority, below airports and overlays), keeping the old file as scenery_packs.ini.bak (default: on)")
+        .Add("cache", @"Directory for generated/cache files, one for every setup: each level-change and texture size gets its own <cache>\<level and sizes> subfolder, and with base-packages each package its own <package name> folder in that")
+        .Add("log-output", "Where the log goes: none, console, log-file or both (default: both)")
+        .Add("log-detail", "on or off: also log every texture and terrain file X-Plane asks for and every texture built, for finding a problem; the log is many times longer (default: off)")
+        .Add("log-file", @"Log path (default: one file per session in %LOCALAPPDATA%\OrthoStreamXP\logs, the last 10 kept; each at most 20 MB)")
+        .Add("mountpoint", "Nonexistent path WinFsp creates for the mount of source (or use xplane)")
+        .Add("lazy-texture-store", "Optional folder of ready-made DDS files (a textures folder's contents), served when no downloaded version is available")
+        .Add("texture-provider", "Generate missing DDS textures from bing, esri, geoportal (Poland's national orthophoto, asked only for tiles in Poland) or synthetic (or any name with texture-url). Several, comma-separated, are tried in order for each tile: esri,bing")
+        .Add("texture-url", "XYZ URL template for the provider that is not built in; supports {x}, {y}, {z}, {q}, {s}")
+        .Add("download-workers", "Parallel source-image downloads, shared by all DDS builds (default: 8)")
+        .Add("download-timeout", $"Seconds one tile download attempt may take before it is retried on another server (default: {TileSource.DefaultTimeoutSeconds})")
+        .Add("download-attempts", $"Tries per tile before its texture fails, 1-10 (default: {TileSource.DefaultAttempts})")
+        .Add("dds-build-workers", "Maximum number of DDS textures generated concurrently, per mounted package; downloads stay limited by download-workers (default: 2)")
+        .Add("encoder-workers", "CPU worker threads for resizing and BC1 DDS encoding (default: 4)")
+        .Add("filesystem-threads", $"Threads answering X-Plane's file requests, 2-512. A request waiting for a texture build keeps its thread, so this must comfortably exceed the textures X-Plane waits for at once (default: {MountSettings.DefaultFileSystemThreads})")
+        .Add("texture-quality", "No longer used: the texture size follows level-change (accepted so older settings files still load)")
+        .Add("background-textures", "Build missing DDS files in a bounded background queue when a local DDS fallback exists", arity: 0)
+        .Add("lazy-terrain-listing", "Show an empty terrain directory listing; DSF-referenced .ter files remain directly accessible", arity: 0)
+        .Add("prefetch-loaded-scenery", "on or off: build the textures of each DSF X-Plane loads as soon as it opens the DSF's terrain definitions, before X-Plane asks for them one by one (default: on)")
+        .Add("track-aircraft", "Follow the aircraft through X-Plane's UDP DATA output (row 20) and build the loaded scenery's textures ahead of it", arity: 0)
+        .Add("xplane-address", "Where X-Plane listens for UDP requests; the aircraft position is requested from it, so nothing has to be set up in X-Plane (default: 127.0.0.1:49000)")
+        .Add("xplane-arguments", "What the window adds to X-Plane's command line when it starts X-Plane, such as --allow_reshade (the mount itself does not use it)")
+        .Add("position-port", "Local UDP port the aircraft position arrives on (default: 49005)")
+        .Add("prefetch-radius-km", "Width either side of the predicted path, and the radius around a slow or stationary aircraft (default: 5 km)")
+        .Add("prefetch-lookahead-seconds", $"How far ahead to prefetch, as flying time at the current ground speed: 120 s is 7.4 km at 120 kt, 28 km at 450 kt (default: {MountSettings.DefaultLookaheadSeconds})")
+        .Add("prefetch-textures", "Maximum DDS files to queue per position update, nearest along the path first (default: 8)")
+        .Add("level-change", "Fetch tiles at (zoom in the .ter/DDS file name + N), -4..2. -1 downloads a quarter of the tiles of 0; +1 four times as many (default: 0). Each level keeps its textures in its own cache subfolder. It also sets the texture size: 4096 px at level 0 and above, half per level below (-2: 1024, -1: 2048, 0 and +1: 4096)")
+        .Add("provisional-lod", "Cold-run speedup: if the full DDS is not ready within provisional-wait seconds, serve a same-size image built from tiles N zoom levels coarser (N=2 downloads 16 tiles instead of 256). 0 disables. Needs background-textures or track-aircraft (default: 2)")
+        .Add("provisional-wait", "Seconds to wait for the full-detail DDS before serving the provisional one (default: 2.0)")
+        .Add("mip-streaming", "on or off: serve photo textures level by level, as X-Plane reads them. Each read is answered with the best imagery at hand, and only the levels X-Plane reads are downloaded, at the zoom they need, so a cold start downloads full detail only next to the aircraft. Off builds every texture whole before X-Plane gets it, with provisional-lod (default: on)")
+        .Add("near-wait", $"Streaming: seconds a read of near or middle scenery may wait for real imagery while a flight starts or X-Plane loads another place (its loading screen and the time parked after it); X-Plane will not read those textures again while the aircraft is parked (default: {MountSettings.DefaultNearWait})")
+        .Add("max-wait", $"Streaming: seconds such a read may wait in flight before X-Plane gets a stand-in stretched from coarser imagery; the real imagery is fetched behind it for X-Plane's next read (default: {MountSettings.DefaultMaxWait})")
+        .Add("build-memory", $"Streaming: MB of memory the builds may hold together while their tiles arrive, each at its own size (about 4.5 x size² bytes: 1.2 MB at 512 px, 19 MB at 2048 px, 75 MB at 4096 px). It limits how many full-size textures build at once, while the small levels far scenery needs run many together, up to {TextureStreamer.DefaultMaxBuilds} (default: {MountSettings.DefaultBuildMemoryMb})")
+        .Add("build-tiles", $"Streaming: tiles the builds may download together. Finer imagery costs more tiles per texture (a ZL16 texture: 1024 at zoom 17, 4096 at zoom 18), so this keeps full-size builds from filling the connection; builds done ahead of X-Plane get half of it, so its own reads always find room. At about 1000 tiles a second the default is half a minute of downloads (default: {TextureStreamer.DefaultBuildTiles})")
+        .Add("paging-k", $"Streaming: the constant of the paging model (which mip level X-Plane wants at which distance), as the flight tuning measures it in flight (default: auto, a guess from X-Plane's window and field of view, else {PagingModel.DefaultK})")
+        .Add("cache-limit", "The most the cache's textures may take, in GB: when over it, the areas flown longest ago are removed at the start and the stop, down to 90% of it. The low-zoom base and the logs do not count (default: 0, no limit)")
+        .Add("match-colours", @"on or off: even out the colours of photos from different captures (a grey, hazy one next to a bright, green one), place by place against the low-zoom base, brightness and tint only. Needs mip streaming; the cache keeps the imagery as downloaded, and what each area's photos usually look like is learnt in %LOCALAPPDATA%\OrthoStreamXP\history\colour-match.json (default: off)")
+        .Add("match-strength", "How strong the colour matching is, 0-100 percent of each correction (default: 100)")
+        .Add("seasons", "on or off: colour the photo textures for the season of X-Plane's date and the place: autumn leaves, bare trees and resting fields in winter, fresh green in spring; conifers, roofs, roads and water stay. The cache keeps the imagery as downloaded (default: off)")
+        .Add("season-strength", $"How strong the seasonal colours are, 0-100 percent (default: {SeasonOptions.DefaultStrength})")
+        .Add("season", "auto (X-Plane's date and the place), or a season for everywhere: early-spring, spring, summer, early-autumn, autumn, late-autumn, winter (default: auto)")
+        .Add("exposure", $"How much light the photo textures let through, {Exposure.Min}-{Exposure.Full} percent: less darkens them evenly, as a camera's exposure, where they look brighter than X-Plane's own scenery. The cache keeps the imagery as downloaded (default: {Exposure.Full})")
+        .Add("season-land-cover", "No longer used: the seasons go by the colours alone (accepted so older settings files still load)")
+        .Add("read-log", @"on or off: log every open and read X-Plane makes through the mount, and the camera position, as CSV files in the logs folder (reads-*.csv, camera-*.csv), for finding a problem; the flight tuning measures the paging model without them (default: off)");
+}
