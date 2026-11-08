@@ -48,5 +48,7 @@ theme:
 markdown_extensions:
   - admonition
   - attr_list
+  # Code blocks inside list items (the default fenced_code only handles them at the start of a line).
+  - pymdownx.superfences
   - toc:
       permalink: true
