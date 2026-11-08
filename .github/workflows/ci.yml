@@ -1,9 +1,7 @@
-# Every push and pull request: build, then run the tests, the real WinFsp mount with synthetic imagery among them.
+# Every pull request: build, then run the tests, the real WinFsp mount with synthetic imagery among them.
 name: CI
 
 on:
-  push:
-    branches: ['**']
   pull_request:
 
 jobs:
