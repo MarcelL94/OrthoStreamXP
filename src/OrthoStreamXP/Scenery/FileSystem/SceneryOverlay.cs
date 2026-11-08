@@ -50,8 +50,9 @@ internal sealed class SceneryOverlay
 
     /// <summary>
     /// What X-Plane gets for a path. A tile's terrain definition is made in memory. With streaming, a photo texture
-    /// is streamed level by level unless it is already complete in the cache or the package has its own copy (both
-    /// are served as they are); everything else, and every texture without streaming, is a backing file from
+    /// is streamed level by level unless it is already complete in the cache or the lazy store has a copy (both
+    /// are served as they are; the package's own photo copies are ignored); everything else, and every texture
+    /// without streaming, is a backing file from
     /// <see cref="Resolve(VirtualPath)"/>.
     /// </summary>
     public OverlayEntry Open(VirtualPath path)
@@ -188,7 +189,8 @@ internal sealed class SceneryOverlay
 
     /// <summary>
     /// Merged listing of a directory: source entries, replaced by same-named cache entries. The textures
-    /// directory merges the source's textures\ and _textures\; _textures itself is not shown.
+    /// directory merges the source's textures\ and _textures\, without the package's own photo textures;
+    /// _textures itself is not shown.
     /// </summary>
     public IReadOnlyList<FileSystemInfo> List(VirtualPath directory)
     {
@@ -196,17 +198,22 @@ internal sealed class SceneryOverlay
             return []; // DSF references terrain definitions by path; X-Plane opens them directly.
         var entries = new Dictionary<string, FileSystemInfo>(StringComparer.OrdinalIgnoreCase);
         // Lowest priority first, so later folders replace same-named entries.
-        foreach (string path in _roots.SourceFolders(directory).Reverse().Append(_roots.CachePath(directory)))
-        {
-            var folder = new DirectoryInfo(path);
-            if (!folder.Exists) continue;
-            foreach (FileSystemInfo child in folder.EnumerateFileSystemInfos())
-            {
-                if (directory.IsRoot && HiddenRootEntries.Contains(child.Name, StringComparer.OrdinalIgnoreCase)) continue;
-                entries[child.Name] = child;
-            }
-        }
+        foreach (string path in _roots.SourceFolders(directory).Reverse())
+            AddEntries(entries, directory, path, fromSource: true);
+        AddEntries(entries, directory, _roots.CachePath(directory), fromSource: false);
         return [.. entries.Values.OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
+    }
+
+    private static void AddEntries(Dictionary<string, FileSystemInfo> entries, VirtualPath directory, string path, bool fromSource)
+    {
+        var folder = new DirectoryInfo(path);
+        if (!folder.Exists) return;
+        foreach (FileSystemInfo child in folder.EnumerateFileSystemInfos())
+        {
+            if (directory.IsRoot && HiddenRootEntries.Contains(child.Name, StringComparer.OrdinalIgnoreCase)) continue;
+            if (fromSource && SceneryRoots.IsPackagePhoto(directory.Child(child.Name))) continue;
+            entries[child.Name] = child;
+        }
     }
 
     public (int Terrain, int Textures) RequestCounts()

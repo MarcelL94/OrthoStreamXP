@@ -100,9 +100,20 @@ internal sealed class SceneryRoots
             ? SourceTextureFolders.Select(folder => Path.Join(Source, folder, string.Join('\\', path.Parts[1..])))
             : [Path.Join(Source, string.Join('\\', path.Parts))];
 
-    /// <summary>The existing source file or directory behind a virtual path, looking in textures\ then _textures\.</summary>
+    /// <summary>
+    /// The existing source file or directory behind a virtual path, looking in textures\ then _textures\.
+    /// The package's own photo textures are never found (see <see cref="IsPackagePhoto"/>).
+    /// </summary>
     public string? FindInSource(VirtualPath path) =>
-        SourceFolders(path).FirstOrDefault(candidate => File.Exists(candidate) || Directory.Exists(candidate));
+        IsPackagePhoto(path) ? null
+        : SourceFolders(path).FirstOrDefault(candidate => File.Exists(candidate) || Directory.Exists(candidate));
+
+    /// <summary>
+    /// Whether a path names a photo texture (textures\21904_35824_BI16.dds). The package's own copies of these
+    /// (made by Ortho4XP or similar) are hidden and never served: photos are always streamed or downloaded,
+    /// while the package's masks (PNGs) and other files pass through as they are.
+    /// </summary>
+    public static bool IsPackagePhoto(VirtualPath path) => PhotoTexture(path) is not null;
 
     /// <summary>
     /// Where a virtual path is kept in the cache: a photo texture under its cache name (textures\87520_143440_BI18.dds
@@ -176,9 +187,10 @@ internal sealed class SceneryRoots
     }
 
     /// <summary>
-    /// A file under textures/ that the package itself provides: from the source's textures\ or _textures\,
-    /// or from the lazy texture store (which holds a textures folder's contents). For a DDS this is the
-    /// local copy that can be served while, or instead of, a download.
+    /// A file under textures/ that the package itself provides: from the source's textures\ or _textures\
+    /// (never a photo texture, see <see cref="IsPackagePhoto"/>), or from the lazy texture store (which holds a
+    /// textures folder's contents). For a store DDS this is the local copy that can be served while, or instead
+    /// of, a download.
     /// </summary>
     public string? FindTexture(VirtualPath path)
     {

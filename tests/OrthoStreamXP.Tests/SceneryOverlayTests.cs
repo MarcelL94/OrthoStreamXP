@@ -65,6 +65,34 @@ public sealed class SceneryOverlayTests : IDisposable
         Assert.Equal(["Earth nav data", "terrain", "textures"], overlay.List(VirtualPath.Parse(@"\")).Select(e => e.Name));
     }
 
+    [Theory]
+    [InlineData("textures")]
+    [InlineData("_textures")]
+    public void The_packages_own_photo_textures_are_hidden_and_never_served_but_its_pngs_are(string folder)
+    {
+        _tree.WriteText($"source/{folder}/21904_35824_BI16.dds", "Ortho4XP photo");
+        string mask = _tree.WritePngHeader($"source/{folder}/21904_35824_ZL16.png", 1024);
+        string transition = _tree.WritePngHeader($"source/{folder}/water_transition.png", 64);
+        string other = _tree.WriteText($"source/{folder}/custom.dds", "not a photo texture");
+        SceneryOverlay overlay = Overlay();
+
+        Assert.Equal(["21904_35824_ZL16.png", "custom.dds", "water_transition.png"],
+            overlay.List(VirtualPath.Of("textures")).Select(e => e.Name));
+        var notFound = Assert.Throws<NtStatusException>(() => overlay.Resolve(@"\textures\21904_35824_BI16.dds"));
+        Assert.Equal(NtStatus.ObjectNameNotFound, notFound.Status);
+        Assert.Equal(mask, overlay.Resolve(@"\textures\21904_35824_ZL16.png"));
+        Assert.Equal(transition, overlay.Resolve(@"\textures\water_transition.png"));
+        Assert.Equal(other, overlay.Resolve(@"\textures\custom.dds"));
+    }
+
+    [Fact]
+    public void A_downloaded_photo_texture_is_served_over_the_packages_own_copy()
+    {
+        _tree.WriteText("source/textures/87520_143440_BI18.dds", "Ortho4XP photo");
+        string cached = _tree.WriteText("cache/textures/10940_17930_PX15.dds", "DDS "); // Overlay() is at level -3
+        Assert.Equal(cached, Overlay().Resolve(@"\textures\87520_143440_BI18.dds"));
+    }
+
     [Fact]
     public void A_lazy_store_dds_is_served_in_place_without_copying()
     {
