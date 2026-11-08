@@ -225,6 +225,8 @@ internal sealed record MountSettings
         customScenery = xplane is null ? null : Path.Join(xplane, "Custom Scenery");
         if (customScenery is not null && !Directory.Exists(customScenery))
             throw new SettingsException($"Not an X-Plane folder (it has no Custom Scenery folder): {xplane}");
+        if (xplane is not null && (source ?? basePackages) is { } packages && SceneryPacks.IsInCustomScenery(packages, xplane))
+            throw new SettingsException($"{InCustomScenery}: {packages}");
         notPackages = [];
         List<PackagePlan> plan;
         if (source is not null)
@@ -291,6 +293,9 @@ internal sealed record MountSettings
         "off" or "false" or "no" => false,
         _ => null,
     };
+
+    /// <summary>The start of the error for scenery packages kept in X-Plane's Custom Scenery.</summary>
+    internal const string InCustomScenery = "Scenery packages must not be in X-Plane's Custom Scenery folder";
 
     private static string? FullPath(string? path) => path is null ? null : Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
 

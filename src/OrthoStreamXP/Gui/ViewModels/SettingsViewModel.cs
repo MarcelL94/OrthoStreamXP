@@ -295,9 +295,14 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
         set
         {
             if (!Set(ref _xplane, value.Trim())) return;
-            if (!_loading) Save("xplane", _xplane.Length == 0 ? null : _xplane);
+            if (!_loading)
+            {
+                Save("xplane", _xplane.Length == 0 ? null : _xplane);
+                SavePackages(); // a packages folder held back until X-Plane was known
+            }
             Raise(nameof(XPlaneOk));
             Raise(nameof(XPlaneStatus));
+            Raise(nameof(PackagesOk));
             Raise(nameof(PackagesStatus));
         }
     }
@@ -314,18 +319,32 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
         set
         {
             if (!Set(ref _packages, value.Trim())) return;
-            if (!_loading) Save("base-packages", _packages.Length == 0 ? null : _packages);
+            if (!_loading) SavePackages();
             Raise(nameof(PackagesOk));
             Raise(nameof(PackagesStatus));
         }
     }
 
-    public bool PackagesOk => SystemCheck.PackagesIn(PackagesFolder).Count > 0;
+    /// <summary>
+    /// The packages folder can be saved: X-Plane is known and the folder is not in its Custom Scenery. Otherwise the
+    /// settings keep the previous folder (an empty one, which clears the setting, is always saved).
+    /// </summary>
+    private bool PackagesAllowed => _packages.Length == 0 || (XPlaneOk && !SystemCheck.IsInCustomScenery(_packages, _xplane));
+
+    private void SavePackages()
+    {
+        string? value = _packages.Length == 0 ? null : _packages;
+        if (PackagesAllowed && _document.Get("base-packages") != value) Save("base-packages", value);
+    }
+
+    public bool PackagesOk => XPlaneOk && !SystemCheck.IsInCustomScenery(PackagesFolder, XPlaneFolder) && SystemCheck.PackagesIn(PackagesFolder).Count > 0;
 
     public string PackagesStatus
     {
         get
         {
+            if (!XPlaneOk) return SystemCheck.XPlaneFirstExplanation;
+            if (SystemCheck.IsInCustomScenery(PackagesFolder, XPlaneFolder)) return SystemCheck.InCustomSceneryExplanation;
             IReadOnlyList<string> found = SystemCheck.PackagesIn(PackagesFolder);
             if (found.Count == 0) return "No scenery packages here. Choose the folder that holds them: each package is a folder with an Earth nav data folder in it.";
             IReadOnlyList<string> taken = _main.Mount.IsRunning ? [] : SystemCheck.TakenInCustomScenery(XPlaneFolder, found);

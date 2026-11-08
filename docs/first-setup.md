@@ -27,9 +27,9 @@ If yours is not listed, click **Choose another folder…** and choose the folder
 
 ![Setup step 3: Scenery packages](images/setup-scenery.png)
 
-Click **Choose a folder…** and pick the **parent folder** that holds your scenery packages, not one of the packages. Below the folder, OrthoStreamXP lists the packages it found.
+Click **Choose a folder…** and pick the **parent folder** (in the example below it's "OrthoPackages") that holds your scenery packages, not one of the packages (not "Europe" or "Asia"). Below the folder, OrthoStreamXP lists the packages it found.
 
-In the example below you have to choose the "OrthoPackages" folder.
+**In this example you have to specify the "OrthoPackages" folder as a Scenery packages folder in the application. Keep in mind the "OrthoPackages" here is just for example it can be whatever folder you have. Don't put your scenery packages to the "X-Plane 12/Custom Scenery" - it has to be out of it somewhere on you PC**
 
   ```
   D:\OrthoPackages\
@@ -44,7 +44,7 @@ In the example below you have to choose the "OrthoPackages" folder.
 
 - Your packages stay unchanged on disk. While OrthoStreamXP runs, they appear in X-Plane's `Custom Scenery` folder with the photos added. When it stops, they disappear from there again.
 - If the folder has no packages, the hint turns red: *That folder has no scenery packages*. Check that each package has an `Earth nav data` folder inside it.
-- If X-Plane's `Custom Scenery` already contains a folder with the same name as one of your packages, you get a warning. Usually another streaming tool still shows that package there; close that tool before you start OrthoStreamXP.
+- If X-Plane's `Custom Scenery` already contains a folder with the same name as one of your packages, you get a warning. Usually another streaming tool still shows that package there; close that tool before you start OrthoStreamXP and check your scenery_packs.ini file.
 
 ## 4. Cache
 

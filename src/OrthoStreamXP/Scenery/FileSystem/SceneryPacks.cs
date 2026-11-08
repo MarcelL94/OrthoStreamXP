@@ -25,6 +25,19 @@ internal static class SceneryPacks
     }
 
     /// <summary>
+    /// Whether <paramref name="folder"/> is the Custom Scenery folder of the X-Plane in <paramref name="xplane"/> or inside it
+    /// (such as Custom Scenery\z_autoortho\scenery). The packages are mounted into that Custom Scenery, so ones kept there would
+    /// be in it twice. A folder of the person's own that is only named Custom Scenery does not count.
+    /// </summary>
+    public static bool IsInCustomScenery(string folder, string xplane)
+    {
+        string customScenery = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Join(xplane, "Custom Scenery")));
+        string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+        return full.Equals(customScenery, StringComparison.OrdinalIgnoreCase)
+               || full.StartsWith(customScenery + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Moves the entries of <paramref name="packageNames"/> (folders directly in Custom Scenery) to the end of
     /// scenery_packs.ini, adding the missing ones; a disabled entry stays disabled. The previous file is kept
     /// as scenery_packs.ini.bak. Returns whether the file changed.

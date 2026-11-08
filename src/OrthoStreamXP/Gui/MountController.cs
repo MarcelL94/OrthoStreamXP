@@ -181,6 +181,9 @@ internal sealed class MountController : ObservableObject
         string message = ex.Message;
         if (ex is SettingsException)
         {
+            if (message.StartsWith(MountSettings.InCustomScenery, StringComparison.Ordinal))
+                return new UserProblem("Your scenery packages are in Custom Scenery", SystemCheck.InCustomSceneryExplanation,
+                    ProblemAction.OpenSettings, "Open settings");
             if (message.Contains("must not already exist", StringComparison.Ordinal))
             {
                 string folder = message[(message.IndexOf(": ", StringComparison.Ordinal) + 2)..];

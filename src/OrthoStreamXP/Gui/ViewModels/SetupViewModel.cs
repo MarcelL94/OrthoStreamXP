@@ -155,7 +155,7 @@ internal sealed class SetupViewModel : ObservableObject
         ? "X-Plane was not found automatically. Choose the folder it is installed in (the one with X-Plane.exe)."
         : XPlaneOk ? "OrthoStreamXP shows your scenery packages in this X-Plane's Custom Scenery folder." : "That folder has no Custom Scenery folder: choose the folder X-Plane is installed in.";
 
-    public bool PackagesOk => SystemCheck.PackagesIn(_packages).Count > 0;
+    public bool PackagesOk => XPlaneOk && !SystemCheck.IsInCustomScenery(_packages, _xplane) && SystemCheck.PackagesIn(_packages).Count > 0;
 
     /// <summary>A folder was chosen and it has no packages (shown in red; before a choice the hint is just a hint).</summary>
     public bool PackagesWrong => _packages is not null && !PackagesOk;
@@ -168,6 +168,8 @@ internal sealed class SetupViewModel : ObservableObject
                 return PackageOptions.Count == 0
                     ? "Choose the folder that holds your scenery packages."
                     : "Choose where your scenery packages are.";
+            if (!XPlaneOk) return SystemCheck.XPlaneFirstExplanation;
+            if (SystemCheck.IsInCustomScenery(_packages, _xplane)) return SystemCheck.InCustomSceneryExplanation;
             IReadOnlyList<string> found = SystemCheck.PackagesIn(_packages);
             if (found.Count == 0) return "That folder has no scenery packages (folders with an Earth nav data folder in them).";
             IReadOnlyList<string> taken = SystemCheck.TakenInCustomScenery(_xplane, found);
@@ -260,6 +262,8 @@ internal sealed class SetupViewModel : ObservableObject
         foreach (FolderOption other in XPlaneOptions) other.Show(other == option);
         Raise(nameof(XPlaneOk));
         Raise(nameof(XPlaneHint));
+        Raise(nameof(PackagesOk));
+        Raise(nameof(PackagesWrong));
         Raise(nameof(PackagesHint));
         Raise(nameof(Summary));
         RelayCommand.Refresh();
