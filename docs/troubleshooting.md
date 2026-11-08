@@ -51,3 +51,5 @@ Open an issue on the project's [GitHub page](https://github.com/flysimdev/OrthoS
 - **Steps to reproduce:** what you did before the problem appeared, for example the area you were flying over and your quality preset.
 - **Your system:** OrthoStreamXP version (on the About page), Windows version and graphics card.
 - **The session log:** the log file of that session, from `%LOCALAPPDATA%\OrthoStreamXP\logs`.
+
+Next: [Questions and answers](faq.md)

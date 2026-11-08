@@ -12,6 +12,7 @@ OrthoStreamXP adds real-world aerial photos to your X-Plane 12 scenery while you
 4. [Settings](settings.md): quality, folders, downloads, colours, seasons and exposure.
 5. [Cache](cache.md): how much disk space the scenery uses and how to free it.
 6. [Troubleshooting](troubleshooting.md): common problems, the log, updates, uninstalling and reporting a bug.
+7. [Questions and answers](faq.md): what OrthoStreamXP does and does not do, choosing the packages folder, switching from AutoOrtho.
 
 ## The short version
 
