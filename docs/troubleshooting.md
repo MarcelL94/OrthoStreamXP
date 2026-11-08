@@ -10,8 +10,8 @@ When something goes wrong, Home shows a notice that says what happened, usually 
 |---|---|
 | **No photos in X-Plane** | Make sure OrthoStreamXP was running **before** X-Plane started. If Home says **Restart X-Plane**, quit X-Plane and start it again. |
 | **WinFsp is needed** / **WinFsp could not show the scenery** | Click **Get WinFsp**, install (or repair) WinFsp, restart your computer, then click **Start** again. If you installed WinFsp or OrthoStreamXP and have not restarted Windows since, restart it first. |
-| **A scenery folder is in the way** | X-Plane's `Custom Scenery` folder already has a folder with the same name as one of your packages. Usually another streaming tool still shows it there: close that tool and click **Start** again. If it is a real folder, move or rename it. **Open Custom Scenery** opens the folder. |
-| **Your scenery packages were not found** | The packages folder is missing or empty. Click **Open settings** and choose the parent folder that holds your packages (each with an `Earth nav data` folder). |
+| **A scenery folder is in the way** | X-Plane's `Custom Scenery` folder already has a folder with the same name as one of your packages. Usually another streaming tool still shows it there: close that tool before you start OrthoStreamXP and check your scenery_packs.ini file and click **Start** again. If it is a real folder, move or rename it. **Open Custom Scenery** opens the folder. |
+| **Your scenery packages were not found** | The packages folder is missing or empty. Click **Open settings** and choose the parent folder that holds your packages |
 | **X-Plane was not found** | The X-Plane folder has no `Custom Scenery` folder. Choose the folder X-Plane is installed in. |
 | **A folder cannot be written** | Choose a cache folder you can write to, for example one in your user folder. |
 | **A setting needs attention** | A value in the settings file is not valid. The notice names it; click **Open settings** to fix it. |

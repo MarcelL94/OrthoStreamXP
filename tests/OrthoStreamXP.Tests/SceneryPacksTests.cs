@@ -103,13 +103,39 @@ public sealed class SceneryPacksTests : IDisposable
     [InlineData("--source BP/XPME_Europe --base-packages BP --xplane X-Plane", "give either source")]
     [InlineData("--base-packages BP --xplane BP", "has no Custom Scenery folder")]
     [InlineData("--base-packages BP --xplane X-Plane", "Custom Scenery already has a folder of that name")]
+    [InlineData("--base-packages X-Plane/Custom~Scenery/z_autoortho/scenery --xplane X-Plane", "must not be in X-Plane's Custom Scenery")]
+    [InlineData("--source X-Plane/Custom~Scenery/XPME_Europe --xplane X-Plane", "must not be in X-Plane's Custom Scenery")]
     public void Mistakes_are_explained(string arguments, string message)
     {
         Directory.CreateDirectory(_tree.PathOf("X-Plane/Custom Scenery/XPME_Europe"));
         Package("BP/XPME_Europe");
-        string[] lines = [.. arguments.Split(' ').Chunk(2).Select(pair => $"{pair[0][2..]} = {_tree.PathOf(pair[1])}")];
+        string[] lines = [.. arguments.Split(' ').Chunk(2).Select(pair => $"{pair[0][2..]} = {_tree.PathOf(pair[1].Replace('~', ' '))}")];
 
         var error = Assert.Throws<SettingsException>(() => MountSettings.PlanPackages(TestSettings.Of(lines), _tree.PathOf("cache"), out _, out _));
         Assert.Contains(message, error.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void An_own_folder_named_Custom_Scenery_outside_X_Plane_can_hold_the_packages()
+    {
+        Directory.CreateDirectory(CustomScenery);
+        Package("Mine/Custom Scenery/XPME_Europe");
+        SettingValues args = TestSettings.Of($"base-packages = {_tree.PathOf("Mine/Custom Scenery")}", $"xplane = {_tree.PathOf("X-Plane 12")}", "cache = unused");
+
+        var plan = MountSettings.PlanPackages(args, _tree.PathOf("cache"), out _, out _);
+
+        Assert.Equal(["XPME_Europe"], plan.Select(p => p.Name));
+    }
+
+    [Theory]
+    [InlineData(@"C:\X-Plane 12\Custom Scenery", true)]
+    [InlineData(@"C:\X-Plane 12\Custom Scenery\", true)]
+    [InlineData(@"C:\X-Plane 12\custom scenery\z_autoOrtho\scenery", true)]
+    [InlineData(@"D:\OrthoStreamXP\Base Packages", false)]
+    [InlineData(@"D:\OrthoStreamXP\Custom Scenery\XPME", false)]
+    [InlineData(@"C:\X-Plane 12\Custom Scenery Backup\XPME", false)]
+    [InlineData(@"C:\X-Plane 12", false)]
+    [InlineData(@"D:\X-Plane 12\Custom Scenery\z_autoOrtho\scenery", false)]
+    public void Only_the_chosen_X_Planes_Custom_Scenery_counts(string folder, bool inCustomScenery) =>
+        Assert.Equal(inCustomScenery, SceneryPacks.IsInCustomScenery(folder, @"C:\X-Plane 12\"));
 }

@@ -18,7 +18,7 @@
           Earth nav data\
           ...
   ```
-
+**In this example you have to specify the "OrthoPackages" folder as a Scenery packages folder in the application. Keep in mind the "OrthoPackages" here is just for example it can be whatever folder you have. Don't put your scenery packages to the "X-Plane 12/Custom Scenery" - it has to be out of it somewhere on you PC**
 - **WinFsp**, a free Windows driver that OrthoStreamXP uses to show the scenery to X-Plane.
 - **An internet connection** for areas you have not flown yet.
 - **Disk space for the cache.** Each new 1° × 1° area you fly can take up to about 2 GB at Balanced, 8 GB at Sharp and 30 GB at Ultra or Extra. 25 GB is a reasonable minimum; a fast SSD is best.

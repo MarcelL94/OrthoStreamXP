@@ -52,6 +52,33 @@ internal static class SystemCheck
         }
     }
 
+    /// <summary>Why a scenery packages folder in X-Plane's Custom Scenery is refused, and where the packages go instead.</summary>
+    public const string InCustomSceneryExplanation =
+        "Your scenery packages must not be in X-Plane's Custom Scenery folder. OrthoStreamXP puts each package into Custom Scenery " +
+        "itself while it runs, so packages kept there (such as Custom Scenery\\z_autoortho\\scenery) would be in X-Plane twice. " +
+        "Move the package folders out of X-Plane, for example to D:\\OrthoStreamXP\\Base Packages, and choose that folder as your scenery packages folder.";
+
+    /// <summary>Why the X-Plane folder is needed before the scenery packages folder.</summary>
+    public const string XPlaneFirstExplanation =
+        "Choose your X-Plane 12 folder first: OrthoStreamXP needs it to check that your scenery packages are not in its Custom Scenery folder.";
+
+    /// <summary>
+    /// A scenery packages folder that is the Custom Scenery folder of the X-Plane in <paramref name="xplane"/> or inside it:
+    /// it cannot be used. Without an X-Plane folder there is nothing to check against (see <see cref="XPlaneFirstExplanation"/>).
+    /// </summary>
+    public static bool IsInCustomScenery(string? folder, string? xplane)
+    {
+        if (string.IsNullOrWhiteSpace(folder) || !IsXPlaneFolder(xplane)) return false;
+        try
+        {
+            return SceneryPacks.IsInCustomScenery(folder, xplane!);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false; // not a usable path: the packages check reports it
+        }
+    }
+
     /// <summary>
     /// Package names that already have a folder in X-Plane's Custom Scenery. A mount cannot replace one: usually
     /// another program still shows the package there.

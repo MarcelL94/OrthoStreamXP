@@ -21,10 +21,19 @@ jobs:
 
       # WinFsp with its Developer part: the build references its .NET API (bin\winfsp-msil.dll), which a default
       # install (choco's too) leaves out. The same version as the developers' PCs; the smoke test mounts with it.
+      # The installer is cached so a GitHub release-download hiccup (504s happen) doesn't fail the run; a cache miss retries.
+      - name: Cache the WinFsp installer
+        uses: actions/cache@v4
+        with:
+          path: winfsp.msi
+          key: winfsp-2.1.25156
+
       - name: Install WinFsp
         shell: pwsh
         run: |
-          Invoke-WebRequest https://github.com/winfsp/winfsp/releases/download/v2.1/winfsp-2.1.25156.msi -OutFile winfsp.msi
+          if (-not (Test-Path winfsp.msi)) {
+            Invoke-WebRequest https://github.com/winfsp/winfsp/releases/download/v2.1/winfsp-2.1.25156.msi -OutFile winfsp.msi -MaximumRetryCount 5 -RetryIntervalSec 15
+          }
           Start-Process msiexec.exe -ArgumentList '/i', 'winfsp.msi', '/qn', 'ADDLOCAL=F.Main,F.User,F.Developer' -Wait
           if (-not (Test-Path "${env:ProgramFiles(x86)}\WinFsp\bin\winfsp-msil.dll")) { throw "WinFsp's .NET API (winfsp-msil.dll) was not installed" }
 

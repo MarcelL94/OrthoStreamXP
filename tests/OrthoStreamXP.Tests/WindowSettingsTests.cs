@@ -139,6 +139,28 @@ public sealed class WindowSettingsTests : IDisposable
     }
 
     [Fact]
+    public void Packages_in_Custom_Scenery_are_explained_with_where_to_put_them()
+    {
+        UserProblem problem = MountController.Explain(new SettingsException(
+            MountSettings.InCustomScenery + @": C:\X-Plane 12\Custom Scenery\z_autoortho\scenery"));
+
+        Assert.Equal("Your scenery packages are in Custom Scenery", problem.Title);
+        Assert.Equal(SystemCheck.InCustomSceneryExplanation, problem.Message);
+        Assert.Equal(ProblemAction.OpenSettings, problem.Action);
+
+        Directory.CreateDirectory(_tree.PathOf("X-Plane 12/Custom Scenery"));
+        string xplane = _tree.PathOf("X-Plane 12");
+        string inside = _tree.PathOf("X-Plane 12/Custom Scenery/z_autoortho/scenery");
+        Assert.True(SystemCheck.IsInCustomScenery(inside, xplane));
+        Assert.False(SystemCheck.IsInCustomScenery(_tree.PathOf("Base Packages"), xplane));
+        Assert.False(SystemCheck.IsInCustomScenery(null, xplane));
+        Assert.False(SystemCheck.IsInCustomScenery(" ", xplane));
+        // Without a real X-Plane folder there is nothing to check against: the window asks for X-Plane first.
+        Assert.False(SystemCheck.IsInCustomScenery(inside, null));
+        Assert.False(SystemCheck.IsInCustomScenery(inside, _tree.PathOf("not X-Plane")));
+    }
+
+    [Fact]
     public void The_values_that_count_are_the_last_lines_and_empty_ones_are_not_set()
     {
         var settings = SettingsDocument.FromText("x.ini", "# a comment\nlevel-change = -2\nlevel-change = 1\nlog-output =\nseasons = on\n");
