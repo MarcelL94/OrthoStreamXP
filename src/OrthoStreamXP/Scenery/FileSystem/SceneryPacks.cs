@@ -47,7 +47,7 @@ internal static class SceneryPacks
         string file = Path.Join(customScenery, FileName);
         string? text = File.Exists(file) ? File.ReadAllText(file) : null;
         string[] lines = text is null ? NewFileHeader : text.ReplaceLineEndings("\n").TrimEnd('\n').Split('\n');
-        List<string> updated = Reorder(lines, packageNames, customScenery);
+        List<string> updated = Reorder(lines, packageNames);
         if (lines.SequenceEqual(updated)) return false;
         string newline = text is not null && !text.Contains("\r\n", StringComparison.Ordinal) ? "\n" : "\r\n";
         if (text is not null) File.Copy(file, file + ".bak", overwrite: true);
@@ -55,34 +55,41 @@ internal static class SceneryPacks
         return true;
     }
 
-    /// <summary>The lines without the packages' entries, then one entry per package at the end.</summary>
-    internal static List<string> Reorder(IReadOnlyList<string> lines, IReadOnlyList<string> packageNames, string customScenery)
+    /// <summary>
+    /// The lines without the packages' entries, then one entry per package at the end. Overlay packages
+    /// (such as XPME_Overlays) come first among them, so their overlays draw on top of the other base packages.
+    /// </summary>
+    internal static List<string> Reorder(IReadOnlyList<string> lines, IReadOnlyList<string> packageNames)
     {
         var disabled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var kept = new List<string>();
         foreach (string line in lines)
         {
-            string? package = PackageOf(line, packageNames, customScenery, out bool isDisabled);
+            string? package = PackageOf(line, packageNames, out bool isDisabled);
             if (package is null) kept.Add(line);
             else if (isDisabled) disabled.Add(package);
         }
         while (kept.Count > 0 && kept[^1].Trim().Length == 0) kept.RemoveAt(kept.Count - 1);
-        foreach (string name in packageNames)
+        foreach (string name in packageNames.OrderBy(name => IsOverlays(name) ? 0 : 1))
             kept.Add($"{(disabled.Contains(name) ? Disabled : Enabled)}Custom Scenery/{name}/");
         return kept;
     }
 
-    /// <summary>Which of the packages a SCENERY_PACK line names (relative to the X-Plane folder, or as a full path).</summary>
-    private static string? PackageOf(string line, IReadOnlyList<string> packageNames, string customScenery, out bool isDisabled)
+    /// <summary>
+    /// Which of the packages a SCENERY_PACK line names, by its folder name wherever the path points: an entry
+    /// for a package of the same name elsewhere (such as the base packages folder itself) would load it twice.
+    /// </summary>
+    private static string? PackageOf(string line, IReadOnlyList<string> packageNames, out bool isDisabled)
     {
         string trimmed = line.Trim();
         isDisabled = trimmed.StartsWith(Disabled, StringComparison.Ordinal);
         if (!isDisabled && !trimmed.StartsWith(Enabled, StringComparison.Ordinal)) return null;
         string path = Normalize(trimmed[(isDisabled ? Disabled : Enabled).Length..]);
-        return packageNames.FirstOrDefault(name =>
-            path.Equals("Custom Scenery/" + name, StringComparison.OrdinalIgnoreCase)
-            || path.Equals(Normalize(Path.Join(customScenery, name)), StringComparison.OrdinalIgnoreCase));
+        string folderName = path[(path.LastIndexOf('/') + 1)..];
+        return packageNames.FirstOrDefault(name => folderName.Equals(name, StringComparison.OrdinalIgnoreCase));
     }
+
+    private static bool IsOverlays(string packageName) => packageName.Contains("Overlays", StringComparison.OrdinalIgnoreCase);
 
     private static string Normalize(string path) => path.Trim().Replace('\\', '/').TrimEnd('/');
 }

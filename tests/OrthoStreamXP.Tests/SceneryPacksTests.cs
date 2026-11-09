@@ -52,8 +52,46 @@ public sealed class SceneryPacksTests : IDisposable
     public void An_entry_with_the_full_path_is_recognised()
     {
         string fullPath = Path.Join(CustomScenery, "XPME_Europe").Replace('\\', '/') + "/";
-        List<string> lines = SceneryPacks.Reorder(["SCENERY", "", $"SCENERY_PACK {fullPath}", "SCENERY_PACK Custom Scenery/KSEA/"], ["XPME_Europe"], CustomScenery);
+        List<string> lines = SceneryPacks.Reorder(["SCENERY", "", $"SCENERY_PACK {fullPath}", "SCENERY_PACK Custom Scenery/KSEA/"], ["XPME_Europe"]);
         Assert.Equal(["SCENERY", "", "SCENERY_PACK Custom Scenery/KSEA/", "SCENERY_PACK Custom Scenery/XPME_Europe/"], lines);
+    }
+
+    [Fact]
+    public void An_entry_for_a_package_of_the_same_name_elsewhere_is_replaced()
+    {
+        List<string> lines = SceneryPacks.Reorder(
+            [
+                "SCENERY", "",
+                @"SCENERY_PACK C:\OrthoData\XPME\Base Packages\XPME_Africa/",
+                "SCENERY_PACK Custom Scenery/KSEA/",
+                @"SCENERY_PACK D:\Other\XPME_Asia",
+                @"SCENERY_PACK C:\OrthoData\XPME\Base Packages\XPME_Africa_Extra/",
+            ],
+            ["XPME_Africa", "XPME_Asia"]);
+        Assert.Equal(
+            [
+                "SCENERY", "",
+                "SCENERY_PACK Custom Scenery/KSEA/",
+                @"SCENERY_PACK C:\OrthoData\XPME\Base Packages\XPME_Africa_Extra/",
+                "SCENERY_PACK Custom Scenery/XPME_Africa/",
+                "SCENERY_PACK Custom Scenery/XPME_Asia/",
+            ], lines);
+    }
+
+    [Fact]
+    public void An_overlays_package_goes_above_the_other_packages()
+    {
+        List<string> lines = SceneryPacks.Reorder(
+            ["SCENERY", "", "SCENERY_PACK Custom Scenery/KSEA/", "SCENERY_PACK_DISABLED Custom Scenery/XPME_Overlays/"],
+            ["XPME_Africa", "XPME_Asia", "XPME_Overlays", "XPME_South_America"]);
+        Assert.Equal(
+            [
+                "SCENERY", "", "SCENERY_PACK Custom Scenery/KSEA/",
+                "SCENERY_PACK_DISABLED Custom Scenery/XPME_Overlays/",
+                "SCENERY_PACK Custom Scenery/XPME_Africa/",
+                "SCENERY_PACK Custom Scenery/XPME_Asia/",
+                "SCENERY_PACK Custom Scenery/XPME_South_America/",
+            ], lines);
     }
 
     [Fact]
