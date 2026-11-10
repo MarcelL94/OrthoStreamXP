@@ -47,16 +47,17 @@ Before installing OrthoStreamXP, make sure you have:
 - **Windows 10 or 11 (64-bit)**
 - **X-Plane 12**
 - **WinFsp**, a free Windows component used to make the streamed scenery available to X-Plane. The setup process checks for it and provides a download link.
-- **Existing scenery packages** for the regions you want to fly over.
+- **Scenery packages** for the regions you want to fly over: a region's mesh downloaded from within OrthoStreamXP, or your own.
 - **An internet connection** for downloading new scenery.
 - **Disk space for the scenery cache** — 25 GB is a reasonable starting point; more space lets you keep more areas available.
 - A graphics card with enough memory for your chosen quality preset.
 
 The installer also installs the .NET 10 desktop runtime if it is missing.
 
-**Important:** OrthoStreamXP streams imagery; it does not create terrain meshes or provide ready-made scenery packages. You must supply compatible base packages from a supported scenery source.
+**Important:** OrthoStreamXP streams imagery onto scenery packages; it does not create terrain meshes itself. There are two ways to get them:
 
-Compatible packages can come from tools such as Ortho4XP, OrthoStudio XP, AutoOrtho, and XPME. You can select an existing package folder during setup.
+1. **Download a region from within OrthoStreamXP:** a whole region's mesh (Europe, North America, ...), during setup or later from the **Packages** page.
+2. **Use your own packages:** compatible packages can come from tools such as Ortho4XP, OrthoStudio XP, AutoOrtho, and XPME. You can select an existing package folder during setup.
 
 ## Installation
 
@@ -116,7 +117,7 @@ Water, roads, buildings, rock, and sand retain their original colours. Seasonal 
 OrthoStreamXP is currently in beta. Please keep the following in mind:
 
 - **Windows only:** the application depends on WinFsp.
-- **You supply the scenery:** compatible base packages are required for the regions you want to fly.
+- **Scenery packages are required:** download a region's mesh (6 to 33 GB per region) from the Packages page, or bring your own.
 - **Internet required for new areas:** scenery loads from the internet on first use; subsequent flights can reuse cached imagery.
 - **Imagery varies by location:** quality, capture date, colours, and transitions between imagery sources may differ.
 - **Performance depends on your setup:** connection speed, disk performance, and graphics memory affect the experience.

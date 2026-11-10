@@ -22,6 +22,9 @@ internal sealed class WindowPreferences
     /// <summary>Start the mount as soon as the window opens.</summary>
     public bool AutoStart { get; set; }
 
+    /// <summary>Download a mesh region's roads, forests and buildings (its overlays) with it.</summary>
+    public bool DownloadOverlays { get; set; } = true;
+
     public static WindowPreferences Load()
     {
         try
@@ -61,12 +64,15 @@ internal sealed class MainViewModel : ObservableObject
         Home = new HomeViewModel(this);
         Settings = new SettingsViewModel(this);
         Cache = new CacheViewModel(this);
+        Packages = new PackagesViewModel(Mount, Preferences, MeshHttp, MeshInstalls,
+            () => SettingsDocument.Load(SettingsDocument.DefaultPath).Get("base-packages"));
         About = new AboutViewModel();
         Navigation =
         [
             new NavItem("Home", "", Home),
             new NavItem("Settings", "", Settings),
             new NavItem("Cache", "", Cache),
+            new NavItem("Packages", "", Packages),
             new NavItem("Log", "", LogPage),
             new NavItem("About", "", About),
         ];
@@ -84,6 +90,12 @@ internal sealed class MainViewModel : ObservableObject
     public HomeViewModel Home { get; }
     public SettingsViewModel Settings { get; }
     public CacheViewModel Cache { get; }
+    /// <summary>The regions of the mesh to download into the scenery packages folder.</summary>
+    public PackagesViewModel Packages { get; }
+    /// <summary>The client mesh downloads share, the setup's and the Packages page's.</summary>
+    public HttpClient MeshHttp { get; } = PackagesViewModel.CreateHttpClient();
+    /// <summary>One region install or delete at a time, from the Packages page or the setup.</summary>
+    public InstallSlot MeshInstalls { get; } = new();
     public LogViewModel LogPage { get; }
     public AboutViewModel About { get; }
     public IReadOnlyList<NavItem> Navigation { get; }

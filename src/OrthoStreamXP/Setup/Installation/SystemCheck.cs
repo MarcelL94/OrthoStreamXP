@@ -55,7 +55,7 @@ internal static class SystemCheck
     /// <summary>Why a scenery packages folder in X-Plane's Custom Scenery is refused, and where the packages go instead.</summary>
     public const string InCustomSceneryExplanation =
         "Your scenery packages must not be in X-Plane's Custom Scenery folder. OrthoStreamXP puts each package into Custom Scenery " +
-        "itself while it runs, so packages kept there (such as Custom Scenery\\z_autoortho\\scenery) would be in X-Plane twice. " +
+        "itself while it runs, so packages kept there would be in X-Plane twice." +
         "Move the package folders out of X-Plane, for example to D:\\OrthoStreamXP\\Base Packages, and choose that folder as your scenery packages folder.";
 
     /// <summary>Why the X-Plane folder is needed before the scenery packages folder.</summary>
@@ -136,6 +136,13 @@ internal static class SystemCheck
 
     /// <summary>The name of the cache folder the setup suggests, beside "Base Packages".</summary>
     public const string CacheFolderName = "Cache";
+
+    /// <summary>
+    /// Where the setup installs downloaded mesh regions for someone who has no scenery packages folder yet:
+    /// <c>OrthoStreamXP\Base Packages</c> in the user's home folder, beside the cache it suggests.
+    /// </summary>
+    public static string SuggestedPackagesFolder() =>
+        Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "OrthoStreamXP", "Base Packages");
 
     private static IEnumerable<DriveInfo> FixedDrives()
     {

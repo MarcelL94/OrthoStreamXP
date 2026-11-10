@@ -10,6 +10,9 @@ namespace OrthoStreamXP.Scenery;
 internal static class SceneryPacks
 {
     public const string FileName = "scenery_packs.ini";
+
+    /// <summary>The names of the packages OrthoStreamXP downloads itself (OSXP_Eur, OSXP_Overlays...).</summary>
+    public const string DownloadedPrefix = "OSXP_";
     private const string Enabled = "SCENERY_PACK ", Disabled = "SCENERY_PACK_DISABLED ";
     private static readonly string[] NewFileHeader = ["I", "1000 Version", "SCENERY", ""];
 
@@ -57,7 +60,8 @@ internal static class SceneryPacks
 
     /// <summary>
     /// The lines without the packages' entries, then one entry per package at the end. Overlay packages
-    /// (such as XPME_Overlays) come first among them, so their overlays draw on top of the other base packages.
+    /// (such as XPME_Overlays) come first among them, so their overlays draw on top of the other base packages;
+    /// the meshes OrthoStreamXP downloads (a whole region each) come last, so the person's own packages cover them.
     /// </summary>
     internal static List<string> Reorder(IReadOnlyList<string> lines, IReadOnlyList<string> packageNames)
     {
@@ -70,7 +74,7 @@ internal static class SceneryPacks
             else if (isDisabled) disabled.Add(package);
         }
         while (kept.Count > 0 && kept[^1].Trim().Length == 0) kept.RemoveAt(kept.Count - 1);
-        foreach (string name in packageNames.OrderBy(name => IsOverlays(name) ? 0 : 1))
+        foreach (string name in packageNames.OrderBy(name => IsOverlays(name) ? 0 : IsDownloadedMesh(name) ? 2 : 1))
             kept.Add($"{(disabled.Contains(name) ? Disabled : Enabled)}Custom Scenery/{name}/");
         return kept;
     }
@@ -90,6 +94,8 @@ internal static class SceneryPacks
     }
 
     private static bool IsOverlays(string packageName) => packageName.Contains("Overlays", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsDownloadedMesh(string packageName) => packageName.StartsWith(DownloadedPrefix, StringComparison.OrdinalIgnoreCase);
 
     private static string Normalize(string path) => path.Trim().Replace('\\', '/').TrimEnd('/');
 }

@@ -43,7 +43,7 @@ Source layout under `src/OrthoStreamXP/`. Sub-folders are for navigation only: *
   - `Aircraft/`: `AircraftPositionListener` (X-Plane UDP), `ViewTracker`, `SceneryLoads`.
   - `Colour/`: `ColourMatcher` (evens patchwork), `SeasonClock` (seasonal tint by simulated date/location).
 - `Textures/` — imagery to DDS: `TextureBuilder` (fetch → stitch → resize → mipmaps → BC1 encode → atomic write; own encoder, SkiaSharp is decode-only), `TextureQuality`, `Images` at the root; `Tiles/` (`TileSource`/`TileStore`: download + cache), `Dds/`, `Scheduling/` (priority gates), `Seasons/`, `Colour/` (`ColourMatch`, `Exposure`, `ColourTable` = the shared BC1 lookup-table recolouring, `PhotoColours` = match → season → exposure as X-Plane reads, also used by the Settings preview).
-- `Setup/` — `Settings/` (`SettingsDocument`, ini under `%LOCALAPPDATA%\OrthoStreamXP`, `QualityPreset`, `ConnectionTest`), `Cache/` (inventory, areas, eviction), `Installation/` (`AppPaths`, `AppUpdates`, `LegacyNames` migrating older settings/cache locations, `SystemCheck`, Velopack hooks).
+- `Setup/` — `Settings/` (`SettingsDocument`, ini under `%LOCALAPPDATA%\OrthoStreamXP`, `QualityPreset`, `ConnectionTest`), `Cache/` (inventory, areas, eviction), `Packages/` (downloads AutoOrtho's mesh regions from GitHub into the packages folder as `OSXP_*` packages: `MeshCatalog`, `AssetDownload`, `ZipUnpacker`, `OverlayPackage`, `RegionInstaller`), `Installation/` (`AppPaths`, `AppUpdates`, `LegacyNames` migrating older settings/cache locations, `SystemCheck`, Velopack hooks).
 - `Tuning/` — flight reports, facts and the preset/setting recommendations.
 - Logs go to `%LOCALAPPDATA%\OrthoStreamXP\logs`.
 

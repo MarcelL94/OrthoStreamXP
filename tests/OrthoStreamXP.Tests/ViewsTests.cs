@@ -18,7 +18,7 @@ public sealed class ViewsTests
                 app.ThemeMode = ThemeMode.Light;
 #pragma warning restore WPF0001
                 app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("pack://application:,,,/orthostreamxp;component/Gui/Theme.xaml") });
-                foreach (Type view in new[] { typeof(OrthoStreamXP.Gui.HomeView), typeof(OrthoStreamXP.Gui.SettingsView), typeof(OrthoStreamXP.Gui.CacheView), typeof(OrthoStreamXP.Gui.LogView) })
+                foreach (Type view in new[] { typeof(OrthoStreamXP.Gui.HomeView), typeof(OrthoStreamXP.Gui.SettingsView), typeof(OrthoStreamXP.Gui.CacheView), typeof(OrthoStreamXP.Gui.PackagesView), typeof(OrthoStreamXP.Gui.LogView) })
                 {
                     var page = (FrameworkElement)Activator.CreateInstance(view, nonPublic: true)!;
                     page.Measure(new Size(1200, 900));

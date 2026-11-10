@@ -25,6 +25,22 @@ If yours is not listed, click **Choose another folder…** and choose the folder
 
 ## 3. Scenery
 
+OrthoStreamXP adds the photos to **scenery packages**: the ground of an area, the shape of the terrain cut in 1° squares. There are two ways to get them.
+
+### Option 1: download a region in OrthoStreamXP
+
+The simplest way, if you have no scenery packages yet. Under **No scenery packages yet?**, click **Download a region…**. If you already chose a folder without packages, the hint turns red and **Download a region now** opens the same list.
+
+![Setup step 3: a folder without scenery packages](images/setup-scenery-empty.png)
+
+The list of regions opens: click **Install** next to the region you fly in. The progress shows under it, and you can stop and resume the download. When it finishes, the region's folder is chosen as your scenery packages folder and **Next** becomes available.
+
+![Setup step 3: the regions to download](images/setup-scenery-download.png)
+
+See [Packages](packages.md) for the sizes, the roads, forests and buildings, and how to update or delete a region later. You can download more regions at any time on the **Packages** page.
+
+### Option 2: use your own scenery packages
+
 ![Setup step 3: Scenery packages](images/setup-scenery.png)
 
 Click **Choose a folder…** and pick the **parent folder** (in the example below it's "OrthoPackages") that holds your scenery packages, not one of the packages (not "Europe" or "Asia"). Below the folder, OrthoStreamXP lists the packages it found.
@@ -43,8 +59,9 @@ D:\OrthoPackages\
 ```
 
 - Your packages stay unchanged on disk. While OrthoStreamXP runs, they appear in X-Plane's `Custom Scenery` folder with the photos added. When it stops, they disappear from there again.
-- If the folder has no packages, the hint turns red: *That folder has no scenery packages*. Check that each package has an `Earth nav data` folder inside it.
+- If the hint turns red, *That folder has no scenery packages*, you probably picked one package instead of the folder that holds them: check that each package has an `Earth nav data` folder inside it.
 - If X-Plane's `Custom Scenery` already contains a folder with the same name as one of your packages, you get a warning. Usually another streaming tool still shows that package there; close that tool before you start OrthoStreamXP and check your scenery_packs.ini file.
+
 
 ## 4. Cache
 

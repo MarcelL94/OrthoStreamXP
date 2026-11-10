@@ -10,6 +10,7 @@
         <DataTemplate DataType="{x:Type gui:HomeViewModel}"><gui:HomeView /></DataTemplate>
         <DataTemplate DataType="{x:Type gui:SettingsViewModel}"><gui:SettingsView /></DataTemplate>
         <DataTemplate DataType="{x:Type gui:CacheViewModel}"><gui:CacheView /></DataTemplate>
+        <DataTemplate DataType="{x:Type gui:PackagesViewModel}"><gui:PackagesView /></DataTemplate>
         <DataTemplate DataType="{x:Type gui:LogViewModel}"><gui:LogView /></DataTemplate>
         <DataTemplate DataType="{x:Type gui:AboutViewModel}"><gui:AboutView /></DataTemplate>
         <DataTemplate DataType="{x:Type gui:SetupViewModel}"><gui:SetupView /></DataTemplate>

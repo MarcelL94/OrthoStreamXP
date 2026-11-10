@@ -7,7 +7,7 @@
     <SelfContained>false</SelfContained>
     <AssemblyName>orthostreamxp</AssemblyName>
     <RootNamespace>OrthoStreamXP</RootNamespace>
-    <Version>0.3.0</Version>
+    <Version>1.1.0</Version>
     <ApplicationIcon>orthostreamxp.ico</ApplicationIcon>
     <!-- The program is the window; app.manifest keeps Explorer from opening a console. -->
     <UseWPF>true</UseWPF>
