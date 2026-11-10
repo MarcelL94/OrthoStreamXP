@@ -87,6 +87,12 @@ internal sealed class MountController : ObservableObject
         await StartAsync().ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// Builds the SimBrief flight plan's departure ahead at the next start (when a SimBrief user is set). For this
+    /// window only, not saved: each time OrthoStreamXP opens it is on again.
+    /// </summary>
+    public bool DeparturePrefetch { get; set; } = true;
+
     /// <summary>X-Plane was already running when the mount started, so it has not seen the photo scenery.</summary>
     public bool XPlaneWasRunningAtStart { get; private set; }
 
@@ -132,6 +138,11 @@ internal sealed class MountController : ObservableObject
                 Log.Configure(settings.LogOutput, settings.LogPath, settings.LogDetail);
                 if (settings.LogOutput.HasFlag(LogOutput.File)) Log.Info($"Log file: {settings.LogPath}{(settings.LogDetail ? " (detailed)" : "")}");
                 Log.Info($"Settings file: {path}");
+                if (!DeparturePrefetch && settings.SimBriefUser is not null)
+                {
+                    settings = settings with { SimBriefUser = null };
+                    Log.Info("SimBrief: the departure prefetch is off for this session");
+                }
                 return MountSession.Start(settings);
             }).ConfigureAwait(true);
             XPlaneWasRunningAtStart = SystemCheck.IsXPlaneRunning();

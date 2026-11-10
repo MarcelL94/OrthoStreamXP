@@ -128,6 +128,23 @@ internal sealed class HomeViewModel : ObservableObject, IPage
         }
     }
 
+    /// <summary>The SimBrief departure prefetch for the next start (this window only, not saved).</summary>
+    public bool DeparturePrefetch
+    {
+        get => Mount.DeparturePrefetch;
+        set
+        {
+            Mount.DeparturePrefetch = value;
+            Raise();
+        }
+    }
+
+    /// <summary>A SimBrief user is set, so there is a departure prefetch to turn off.</summary>
+    public bool ShowDeparturePrefetch { get; private set; }
+
+    /// <summary>The switch applies when streaming starts: it can be changed only while stopped.</summary>
+    public bool CanChangeDeparturePrefetch => Mount.State == MountState.Stopped;
+
     public string StartStopText => Mount.State switch
     {
         MountState.Running => "Stop",
@@ -355,6 +372,8 @@ internal sealed class HomeViewModel : ObservableObject, IPage
                 .Select(name => new PackageRow(name, xplane is null ? "" : Path.Join(xplane, "Custom Scenery", name)))];
         }
         Raise(nameof(PackagesCaption));
+        ShowDeparturePrefetch = !string.IsNullOrWhiteSpace(settings.Get("simbrief-user"));
+        Raise(nameof(ShowDeparturePrefetch));
     }
 
     // ---------------------------------------------------------------- the last flight's report
@@ -494,7 +513,7 @@ internal sealed class HomeViewModel : ObservableObject, IPage
         Notices = BuildNotices();
         foreach (string name in new[]
                  {
-                     nameof(ShowFly), nameof(FlyText), nameof(FlyToolTip),
+                     nameof(ShowFly), nameof(FlyText), nameof(FlyToolTip), nameof(CanChangeDeparturePrefetch),
                      nameof(StartStopText), nameof(StartStopGlyph), nameof(IsBusy), nameof(StatusKind), nameof(StatusGlyph), nameof(StatusTitle),
                      nameof(StatusText), nameof(ShowGettingStarted), nameof(ShowStats), nameof(StatsTitle), nameof(TexturesValue), nameof(ReadyAheadValue),
                      nameof(ReadyAheadCaption), nameof(BuildingValue), nameof(SpeedValue), nameof(SpeedCaption), nameof(XPlaneTitle),

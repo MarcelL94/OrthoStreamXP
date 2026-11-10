@@ -109,6 +109,11 @@
                             </StackPanel>
                         </Button>
                         <CheckBox Content="Start when OrthoStreamXP opens" Style="{StaticResource Switch}" IsChecked="{Binding AutoStart}" Margin="0,12,0,0" HorizontalAlignment="Right" />
+                        <CheckBox Content="Prefetch the SimBrief departure" Style="{StaticResource Switch}" IsChecked="{Binding DeparturePrefetch}"
+                                  IsEnabled="{Binding CanChangeDeparturePrefetch}" Margin="0,8,0,0" HorizontalAlignment="Right"
+                                  Visibility="{Binding ShowDeparturePrefetch, Converter={StaticResource Visible}}"
+                                  ToolTip="For this session: builds the photos around your latest SimBrief flight plan's departure airport when streaming starts. It is on again the next time OrthoStreamXP opens, and can be changed while streaming is stopped."
+                                  AutomationProperties.Name="Prefetch the SimBrief departure for this session" />
                     </StackPanel>
                 </Grid>
             </Border>
