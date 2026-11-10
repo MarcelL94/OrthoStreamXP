@@ -57,6 +57,8 @@ internal sealed class MipWarmer : IDisposable
     private readonly int _heavyLimit;
     private readonly Lock _gate = new();
     private readonly Dictionary<string, Request> _waiting = [];
+    /// <summary>Textures whose base tile is being fetched before the level asked for (see <see cref="Target"/>).</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _stepping = new();
     private readonly SemaphoreSlim _wake = new(0);
     private readonly CancellationTokenSource _stop = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -106,15 +108,11 @@ internal sealed class MipWarmer : IDisposable
     }
 
     /// <summary>
-    /// The flight-path and SimBrief departure prefetch: whole textures ahead of X-Plane. Returns how many were queued.
-    /// A texture with nothing yet gets its base tile first, as load-ahead gives every texture: once it is whole,
-    /// load-ahead skips it, and the low-zoom base there (far scenery, colour matching, the report's map) would stay empty.
+    /// The flight-path prefetch (and the SimBrief departure without streaming's levels): whole textures ahead of
+    /// X-Plane. Returns how many were queued. Each gets its base tile first (see <see cref="Target"/>).
     /// </summary>
     public int Prefetch(IReadOnlyList<VirtualPath> textures)
     {
-        foreach (VirtualPath texture in textures)
-            if (_streamer.Get(texture) is { } t && _streamer.RealFrom(t) > t.BaseMip)
-                _streamer.Warm(texture, t.BaseMip, FetchPriority.Warm);
         lock (_gate)
             foreach (VirtualPath texture in textures)
                 _waiting[texture.Key] = new Request(texture, 0, FetchPriority.Warm);
@@ -144,9 +142,9 @@ internal sealed class MipWarmer : IDisposable
                 had++;
                 continue;
             }
-            // Its base tile first, as load-ahead gives every texture (see Prefetch).
-            if (mip < t.BaseMip && real > t.BaseMip) _streamer.Warm(texture, t.BaseMip, FetchPriority.Warm);
-            requests.Add(new Request(texture, mip, PriorityOf(t, wanted), Distance: distance));
+            // Far ones are only their base tile: before the middle levels, as X-Plane reads far scenery first.
+            int priority = mip >= t.BaseMip ? FetchPriority.Warm : PriorityOf(t, wanted);
+            requests.Add(new Request(texture, mip, priority, Distance: distance));
         }
         lock (_gate)
             foreach (Request request in requests)
@@ -179,6 +177,13 @@ internal sealed class MipWarmer : IDisposable
         double? departureDistance = null)
     {
         if (_streamer.Get(path) is not { } t) return null;
+        // A level asked for ahead (flight path, departure) on a texture with nothing yet: its base tile first, in the
+        // base tiles' own places and before the middle levels. Load-ahead gives every texture one, but skips a texture
+        // that is whole already: the low-zoom base there (far scenery, colour matching, the report's map) would stay
+        // empty. And a far texture X-Plane reads before its base tile arrives gets one flat colour.
+        if (mip is int asked && asked < t.BaseMip && _streamer.RealFrom(t) > t.BaseMip)
+            return (t, t.BaseMip, Math.Min(priority ?? FetchPriority.Warm, FetchPriority.Warm),
+                _view.Current is { } at ? ViewTracker.DistanceM(at, t.Lat, t.Lon) : departureDistance ?? double.MaxValue);
         if (_view.Current is not { } camera)
             return (t, mip ?? t.BaseMip, priority ?? FetchPriority.Background, departureDistance ?? double.MaxValue);
         double distance = ViewTracker.DistanceM(camera, t.Lat, t.Lon);
@@ -231,6 +236,7 @@ internal sealed class MipWarmer : IDisposable
                 Remove(request);
                 continue;
             }
+            if (_stepping.ContainsKey(request.Texture.Key)) continue; // its base tile is on the way
             BuildKind kind = KindOf(t.Texture, t.Mip);
             if (Full(kind)) continue;
             if (_streamer.RealFrom(t.Texture) <= t.Mip)
@@ -244,13 +250,18 @@ internal sealed class MipWarmer : IDisposable
                 Remove(request);
                 continue;
             }
-            Remove(request);
+            // A base step keeps the request: its level follows once the base tile is in.
+            bool baseStep = request.Mip is int final && final < t.Mip;
+            if (!baseStep) Remove(request);
             Interlocked.Increment(ref _queued);
             if (build.IsCompleted) continue;
+            if (baseStep) _stepping[request.Texture.Key] = 0;
             Interlocked.Increment(ref _running[(int)kind]);
+            string key = request.Texture.Key;
             build.ContinueWith(_ =>
             {
                 Interlocked.Decrement(ref _running[(int)kind]);
+                _stepping.TryRemove(key, out byte _);
                 Wake();
             }, TaskScheduler.Default);
         }

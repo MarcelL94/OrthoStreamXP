@@ -38,6 +38,16 @@ internal sealed class PagingModel
     /// <summary>Set by the user: X-Plane's screen and field of view do not change it.</summary>
     public bool Fixed { get; }
 
+    /// <summary>
+    /// Takes the k X-Plane's screen gave last time as the guess until it sends its screen again (only after a flight has
+    /// loaded): what is fetched ahead of the first load then fits this PC's screen, not the default's.
+    /// </summary>
+    public void Remember(double k)
+    {
+        if (Fixed || k is < 100 or > 100_000) return;
+        Volatile.Write(ref _k, k);
+    }
+
     public static double GuessK(double screenWidthPx, double fieldOfViewDeg) =>
         ScreenGuessFactor * screenWidthPx / (2 * Math.Tan(fieldOfViewDeg * Math.PI / 360));
 

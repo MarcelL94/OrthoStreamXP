@@ -482,8 +482,11 @@ public sealed class StreamingTests : IDisposable
         StreamedTexture near = s.Streamer.Get(Texture())!, far = s.Streamer.Get(Texture("21904_36144_BI16"))!; // 20 textures east
 
         var (queued, had) = warmer.PrefetchAround([Texture(), Texture("21904_36144_BI16")], near.Lat, near.Lon);
-        warmer.StartWhatFits();
-        await Until(() => s.Streamer.RealFrom(near) == 0 && s.Streamer.RealFrom(far) <= far.BaseMip);
+        await Until(() =>
+        {
+            warmer.StartWhatFits();
+            return s.Streamer.RealFrom(near) == 0 && s.Streamer.RealFrom(far) <= far.BaseMip;
+        });
 
         Assert.Equal((2, 0), (queued, had));
         Assert.Equal(16, Zooms(s.Server).Count(z => z == 14)); // only the near one in full
@@ -501,10 +504,15 @@ public sealed class StreamingTests : IDisposable
         StreamedTexture t = s.Streamer.Get(Texture())!;
 
         warmer.Prefetch([Texture()]);
-        warmer.StartWhatFits();
-        await Until(() => s.Streamer.RealFrom(t) == 0 && s.Builder.StoreHasRegion(t.Name, t.ZoomFor(t.BaseMip)));
-        Assert.Equal(1, Zooms(s.Server).Count(z => z == 12));
-        Assert.Equal(16, Zooms(s.Server).Count(z => z == 14));
+        await Until(() =>
+        {
+            warmer.StartWhatFits(); // as its loop does: the base tile, then the level
+            return s.Streamer.RealFrom(t) == 0 && s.Builder.StoreHasRegion(t.Name, t.ZoomFor(t.BaseMip));
+        });
+        int[] zooms = Zooms(s.Server);
+        Assert.Equal(1, zooms.Count(z => z == 12));
+        Assert.Equal(16, zooms.Count(z => z == 14));
+        Assert.Equal(12, zooms[0]); // the base tile before the level's tiles
     }
 
     [Fact]
@@ -885,6 +893,22 @@ public sealed class StreamingPartsTests : IDisposable
         var set = new PagingModel(1500);
         set.UseScreen(1920, 90);
         Assert.Equal(1500, set.K);
+    }
+
+    [Fact]
+    public void The_k_from_last_times_screen_is_the_guess_until_XPlane_sends_its_screen_again()
+    {
+        var model = new PagingModel();
+        model.Remember(4481); // 5120 px at 110°, kept from the last session
+        Assert.Equal(4481, model.K);
+        model.UseScreen(1920, 90); // another screen this time
+        Assert.Equal(2400, model.K, 0);
+
+        var set = new PagingModel(1500);
+        set.Remember(4481);
+        Assert.Equal(1500, set.K); // a k the user set stays
+        model.Remember(5); // nonsense is ignored
+        Assert.Equal(2400, model.K, 0);
     }
 
     [Fact]

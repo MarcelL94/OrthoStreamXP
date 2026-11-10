@@ -92,6 +92,8 @@ internal sealed class MountSession : IDisposable
         TextureBuilder? builder = _tiles is null ? null : new TextureBuilder(_tiles, s.EncoderWorkers);
         var textureOptions = new TextureOptions(_tiles?.Provider ?? "", s.Textures, s.DdsBuildWorkers, s.Background, s.ProvisionalLod, s.ProvisionalWait);
         var model = new PagingModel(s.PagingK);
+        string screenK = Path.Join(AppPaths.History, PagingScreenFile);
+        if (!model.Fixed && ReadNumber(screenK) is { } rememberedK) model.Remember(rememberedK);
         // Builds run within two budgets, each counted at its own size: --build-memory for the pictures they hold while their
         // tiles arrive (75 MB at 4096 px; the small levels far scenery needs almost nothing), and --build-tiles for what
         // they download, so finer imagery (4096 tiles for a ZL16 texture at zoom 18) does not fill the connection.
@@ -165,7 +167,13 @@ internal sealed class MountSession : IDisposable
                     _view.Update(camera);
                     readLog?.Camera(camera);
                 },
-                streaming ? model.UseScreen : null,
+                streaming
+                    ? (width, fieldOfView) =>
+                    {
+                        model.UseScreen(width, fieldOfView);
+                        if (!model.Fixed) WriteNumber(screenK, model.K);
+                    }
+                    : null,
                 seasons is null ? null : day => seasons.OfferDate(day, _view.Starting));
         }
 
@@ -232,6 +240,34 @@ internal sealed class MountSession : IDisposable
                 Log.Warning($"SimBrief: departure prefetch failed ({ex.Message})");
             }
         }, stop);
+    }
+
+    /// <summary>The paging model's k from X-Plane's screen last time: the first guess at the next start.</summary>
+    private const string PagingScreenFile = "paging-screen-k.txt";
+
+    private static double? ReadNumber(string path)
+    {
+        try
+        {
+            return File.Exists(path) && double.TryParse(File.ReadAllText(path).Trim(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double value) ? value : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static void WriteNumber(string path, double value)
+    {
+        try
+        {
+            AtomicFile.Write(path, System.Text.Encoding.UTF8.GetBytes(value.ToString("0", System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Info($"Paging model: could not keep k for the next start ({ex.Message})");
+        }
     }
 
     /// <summary>The live numbers of every package together.</summary>
