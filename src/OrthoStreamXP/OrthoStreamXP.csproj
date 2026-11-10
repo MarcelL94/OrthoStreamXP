@@ -24,6 +24,11 @@
     <WinFspDir Condition="'$(WinFspDir)' == ''">$(MSBuildProgramFiles32)\WinFsp</WinFspDir>
   </PropertyGroup>
 
+  <!-- -p:NoAppUpdates=true (build-installer.ps1 -NoUpdates): a test build that never looks for or installs new versions. -->
+  <PropertyGroup Condition="'$(NoAppUpdates)' == 'true'">
+    <DefineConstants>$(DefineConstants);NO_APP_UPDATES</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Image decoding only (JPEG/PNG tiles); resizing and BC1 encoding are our own code. -->
     <PackageReference Include="SkiaSharp" Version="4.153.1" />

@@ -4,20 +4,21 @@
 #
 #   .\build-installer.ps1              the version in src\OrthoStreamXP\OrthoStreamXP.csproj
 #   .\build-installer.ps1 -Version 0.1.0
-param([string]$Version)
+#   .\build-installer.ps1 -Version 1.3.0-rc.1 -NoUpdates   a test build that never looks for or installs new versions
+param([string]$Version, [switch]$NoUpdates)
 
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
 $project = 'src\OrthoStreamXP\OrthoStreamXP.csproj'
 if (-not $Version) { $Version = (dotnet msbuild $project -getProperty:Version).Trim() }
-Write-Host "OrthoStreamXP $Version"
+Write-Host "OrthoStreamXP $Version$(if ($NoUpdates) { ' (updates turned off)' })"
 
 dotnet tool restore
 if (Test-Path artifacts\publish) { Remove-Item artifacts\publish -Recurse -Force }
 # A local build starts clean: Velopack refuses a version it already packed there.
 if (Test-Path artifacts\releases) { Remove-Item artifacts\releases -Recurse -Force }
-dotnet publish $project -c Release -o artifacts\publish -p:Version=$Version
+dotnet publish $project -c Release -o artifacts\publish -p:Version=$Version -p:NoAppUpdates=$($NoUpdates.IsPresent.ToString().ToLowerInvariant())
 if ($LASTEXITCODE -ne 0) { throw 'publish failed' }
 
 # The licence page: the notice (beta, the imagery's terms), then the full GPL-3.0.

@@ -19,6 +19,11 @@ internal sealed class AppUpdates
 
     public AppUpdates()
     {
+#if NO_APP_UPDATES
+        // A test build (build-installer.ps1 -NoUpdates): it stays the version it is.
+        _manager = null;
+        Log.Info("Updates are not looked for: they are turned off in this build");
+#else
         try
         {
             var manager = new UpdateManager(new GithubSource(Repository, accessToken: null, prerelease: true));
@@ -28,6 +33,7 @@ internal sealed class AppUpdates
         {
             Log.Info($"Updates are not looked for: {ex.Message}");
         }
+#endif
     }
 
     /// <summary>The version running, when installed.</summary>
