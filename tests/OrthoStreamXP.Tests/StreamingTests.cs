@@ -495,6 +495,32 @@ public sealed class StreamingTests : IDisposable
     }
 
     [Fact]
+    public void The_ground_prewarm_ranks_after_the_departure_and_is_dropped_for_the_takeoff()
+    {
+        Setup s = Streaming();
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+        StreamedTexture here = s.Streamer.Get(Texture())!;
+        VirtualPath arrival = Texture("21904_36144_BI16"), route = Texture("21824_35824_BI16");
+        (double, double) Beside(double lat, double lon) => (0, 0);
+
+        warmer.PrefetchAround([Texture()], here.Lat, here.Lon); // the departure
+        Assert.Equal((1, 0), warmer.PrefetchGround([arrival], Beside, GroundPrewarm.Arrival));
+        Assert.Equal((1, 0), warmer.PrefetchGround([route], Beside, GroundPrewarm.Route));
+        Assert.Equal((0, 0), warmer.PrefetchGround([Texture()], Beside, GroundPrewarm.Route)); // the departure's request stays
+        Assert.Equal(2, warmer.GroundWaiting);
+
+        // Full detail asked for, nothing there yet: the base tile first, still below the departure and in phase order.
+        int departure = warmer.Target(Texture(), 0, FetchPriority.NearWarm)!.Value.Priority;
+        int first = warmer.Target(arrival, 0, MipWarmer.GroundPriority(GroundPrewarm.Arrival))!.Value.Priority;
+        int last = warmer.Target(route, 0, MipWarmer.GroundPriority(GroundPrewarm.Route))!.Value.Priority;
+        Assert.True(departure < FetchPriority.Background && FetchPriority.Background < first && first < last, $"{departure} < {first} < {last}");
+
+        Assert.Equal(2, warmer.CancelGround());
+        Assert.Equal(0, warmer.GroundWaiting);
+        Assert.Equal(0, warmer.CancelGround());
+    }
+
+    [Fact]
     public async Task A_whole_texture_prefetched_ahead_of_XPlane_gets_its_base_tile_too()
     {
         // The SimBrief departure: fetched whole before X-Plane loads it, then skipped by load-ahead as complete. Without

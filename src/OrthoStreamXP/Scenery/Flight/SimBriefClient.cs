@@ -4,18 +4,19 @@ using System.Text.Json;
 
 namespace OrthoStreamXP.Scenery;
 
-/// <summary>The departure airport of a flight plan.</summary>
-internal sealed record FlightOrigin(string Icao, double Lat, double Lon);
-
-/// <summary>SimBrief's answer: the latest flight plan's origin (and destination), or what went wrong in plain words.</summary>
-internal sealed record SimBriefAnswer(FlightOrigin? Origin, string? Destination, string? Problem)
+/// <summary>SimBrief's answer: the latest flight plan, or what went wrong in plain words.</summary>
+internal sealed record SimBriefAnswer(FlightPlan? Plan, string? Problem)
 {
-    public static SimBriefAnswer Failed(string problem) => new(null, null, problem);
+    public FlightOrigin? Origin => Plan?.Origin;
+
+    public string? Destination => Plan?.Destination?.Icao;
+
+    public static SimBriefAnswer Failed(string problem) => new(null, problem);
 }
 
 /// <summary>
-/// Reads the latest flight plan (OFP) a SimBrief user generated, through SimBrief's public fetcher. Only the origin is
-/// used. A failure is answered with its reason, never an exception: the flight plan is a hint, never a reason for the
+/// Reads the latest flight plan (OFP) a SimBrief user generated, through SimBrief's public fetcher: the departure,
+/// arrival and alternate airports and the navlog. A failure is answered with its reason, never an exception: the flight plan is a hint, never a reason for the
 /// mount to fail.
 /// </summary>
 internal sealed class SimBriefClient(HttpClient http)
@@ -31,12 +32,12 @@ internal sealed class SimBriefClient(HttpClient http)
         return new Uri($"{FetcherUrl}?{key}={Uri.EscapeDataString(trimmed)}&json=1");
     }
 
-    /// <summary>The latest flight plan's origin, or null with the reason logged.</summary>
-    public async Task<FlightOrigin?> LatestOriginAsync(string user, CancellationToken ct)
+    /// <summary>The latest flight plan, or null with the reason logged.</summary>
+    public async Task<FlightPlan?> LatestPlanAsync(string user, CancellationToken ct)
     {
         SimBriefAnswer answer = await FetchAsync(user, ct).ConfigureAwait(false);
         if (answer.Problem is { } problem) Log.Warning($"SimBrief: {problem}");
-        return answer.Origin;
+        return answer.Plan;
     }
 
     /// <summary>Asks SimBrief for the user's latest flight plan.</summary>
@@ -64,7 +65,7 @@ internal sealed class SimBriefClient(HttpClient http)
         }
     }
 
-    /// <summary>The flight plan in SimBrief's JSON: its origin, or the reason there is none.</summary>
+    /// <summary>The flight plan in SimBrief's JSON, or the reason there is none.</summary>
     internal static SimBriefAnswer Parse(string json)
     {
         try
@@ -74,17 +75,41 @@ internal sealed class SimBriefClient(HttpClient http)
             string? status = root.TryGetProperty("fetch", out JsonElement fetch) && fetch.TryGetProperty("status", out JsonElement s) ? s.GetString() : null;
             if (status is not null && !status.Equals("Success", StringComparison.OrdinalIgnoreCase))
                 return SimBriefAnswer.Failed(status.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) ? status[6..].Trim() : status);
-            if (!root.TryGetProperty("origin", out JsonElement origin)
-                || Number(origin, "pos_lat") is not { } lat || Number(origin, "pos_long") is not { } lon
-                || lat is < -90 or > 90 || lon is < -180 or > 180)
-                return SimBriefAnswer.Failed("the latest flight plan has no departure position");
-            string? destination = root.TryGetProperty("destination", out JsonElement to) ? Text(to, "icao_code") : null;
-            return new SimBriefAnswer(new FlightOrigin(Text(origin, "icao_code") ?? "", lat, lon), destination, null);
+            if (Airport(root, "origin") is not { } origin) return SimBriefAnswer.Failed("the latest flight plan has no departure position");
+            return new SimBriefAnswer(new FlightPlan(origin, Airport(root, "destination"), Airport(root, "alternate"), Route(root)), null);
         }
         catch (JsonException)
         {
             return SimBriefAnswer.Failed("SimBrief's answer could not be read");
         }
+    }
+
+    /// <summary>An airport by its key; SimBrief gives several alternates as an array (the first is taken).</summary>
+    private static FlightOrigin? Airport(JsonElement root, string key)
+    {
+        if (!root.TryGetProperty(key, out JsonElement airport)) return null;
+        if (airport.ValueKind == JsonValueKind.Array) airport = airport.EnumerateArray().FirstOrDefault();
+        if (airport.ValueKind != JsonValueKind.Object || Number(airport, "pos_lat") is not { } lat || Number(airport, "pos_long") is not { } lon
+            || lat is < -90 or > 90 || lon is < -180 or > 180) return null;
+        return new FlightOrigin(Text(airport, "icao_code") ?? "", lat, lon, Number(airport, "elevation") ?? 0);
+    }
+
+    /// <summary>The navlog's points in order; one point comes as an object, not an array.</summary>
+    private static List<RoutePoint> Route(JsonElement root)
+    {
+        if (!root.TryGetProperty("navlog", out JsonElement navlog) || !navlog.TryGetProperty("fix", out JsonElement fixes)) return [];
+        IEnumerable<JsonElement> all = fixes.ValueKind switch
+        {
+            JsonValueKind.Array => fixes.EnumerateArray(),
+            JsonValueKind.Object => [fixes],
+            _ => [],
+        };
+        var route = new List<RoutePoint>();
+        foreach (JsonElement fix in all)
+            if (Number(fix, "pos_lat") is { } lat && Number(fix, "pos_long") is { } lon && lat is >= -90 and <= 90 && lon is >= -180 and <= 180)
+                route.Add(new RoutePoint(Text(fix, "ident") ?? "", lat, lon, Number(fix, "altitude_feet") ?? 0,
+                    (Number(fix, "time_total") ?? 0) / 60, Text(fix, "stage") ?? ""));
+        return route;
     }
 
     private static string? Text(JsonElement parent, string name) =>

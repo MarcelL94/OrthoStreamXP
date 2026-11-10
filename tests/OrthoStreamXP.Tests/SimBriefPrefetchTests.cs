@@ -36,7 +36,7 @@ public sealed class SimBriefPrefetchTests : IDisposable
     {
         using var handler = new StubHandler(status, body);
         using var http = new HttpClient(handler);
-        FlightOrigin? origin = await new SimBriefClient(http).LatestOriginAsync(user, TestContext.Current.CancellationToken);
+        FlightOrigin? origin = (await new SimBriefClient(http).LatestPlanAsync(user, TestContext.Current.CancellationToken))?.Origin;
         return (origin, handler.Asked);
     }
 
@@ -174,7 +174,7 @@ public sealed class SimBriefPrefetchTests : IDisposable
     public async Task With_streaming_the_whole_area_XPlane_loads_is_queued_and_without_its_DSFs_the_circle()
     {
         string package = Package(AtAirport, Around, FarAway);
-        _tree.WriteBytes("pkg/Earth nav data/+40+010/+48+011.dsf", DepartureAreaTests.Dsf($"terrain/{AtAirport.Stem}.ter", $"terrain/{FarAway.Stem}.ter"));
+        _tree.WriteBytes("pkg/Earth nav data/+40+010/+48+011.dsf", SceneryAreaTests.Dsf($"terrain/{AtAirport.Stem}.ter", $"terrain/{FarAway.Stem}.ter"));
         var area = new List<VirtualPath>();
         var whole = new List<VirtualPath>();
         DepartureTarget Target(string source) => new("pkg", source, _ => false, t => { whole.AddRange(t); return t.Count; },

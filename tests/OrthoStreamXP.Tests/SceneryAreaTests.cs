@@ -5,7 +5,7 @@ using OrthoStreamXP.Scenery;
 namespace OrthoStreamXP.Tests;
 
 /// <summary>The scenery X-Plane loads around a departure: its DSF tiles, and the textures their TERT tables name.</summary>
-public sealed class DepartureAreaTests : IDisposable
+public sealed class SceneryAreaTests : IDisposable
 {
     private readonly TempTree _tree = new();
 
@@ -43,22 +43,22 @@ public sealed class DepartureAreaTests : IDisposable
     public void XPlane_loads_three_rows_by_four_columns_leaning_to_the_nearer_half()
     {
         // EDDV (52.46 N, 9.68 E): X-Plane 12 loaded +51..+53 x +008..+011.
-        var tiles = DepartureArea.TilesAround(52.46, 9.68);
+        var tiles = SceneryArea.TilesAround(52.46, 9.68);
         Assert.Equal(12, tiles.Count);
         Assert.Equal([51, 52, 53], tiles.Select(t => t.Lat).Distinct());
         Assert.Equal([8, 9, 10, 11], tiles.Select(t => t.Lon).Distinct());
 
         // In the western half of the column, one more to the west.
-        Assert.Equal([7, 8, 9, 10], DepartureArea.TilesAround(52.46, 9.2).Select(t => t.Lon).Distinct());
+        Assert.Equal([7, 8, 9, 10], SceneryArea.TilesAround(52.46, 9.2).Select(t => t.Lon).Distinct());
         // Across the antimeridian.
-        Assert.Equal([178, 179, -180, -179], DepartureArea.TilesAround(-17.7, 179.6).Select(t => t.Lon).Distinct());
+        Assert.Equal([178, 179, -180, -179], SceneryArea.TilesAround(-17.7, 179.6).Select(t => t.Lon).Distinct());
     }
 
     [Fact]
     public void A_DSF_lives_in_its_ten_degree_folder()
     {
-        Assert.Equal(Path.Join("pkg", "Earth nav data", "+50+000", "+52+009.dsf"), DepartureArea.DsfPath("pkg", 52, 9));
-        Assert.Equal(Path.Join("pkg", "Earth nav data", "-40-060", "-34-059.dsf"), DepartureArea.DsfPath("pkg", -34, -59));
+        Assert.Equal(Path.Join("pkg", "Earth nav data", "+50+000", "+52+009.dsf"), SceneryArea.DsfPath("pkg", 52, 9));
+        Assert.Equal(Path.Join("pkg", "Earth nav data", "-40-060", "-34-059.dsf"), SceneryArea.DsfPath("pkg", -34, -59));
     }
 
     [Fact]
@@ -69,11 +69,11 @@ public sealed class DepartureAreaTests : IDisposable
             Dsf("terrain_Water", "terrain/21552_34576_BI16.ter", "terrain/21552_34576_BI16_water_overlay.ter", "terrain/21584_34464_BI18.ter"));
         _tree.WriteBytes("pkg/Earth nav data/+50+010/+52+010.dsf", Dsf("terrain/21552_34576_BI16.ter", "terrain/21600_34608_BI16.ter"));
 
-        IReadOnlyList<VirtualPath> textures = DepartureArea.Textures(package, 52.46, 9.68, out int tiles);
+        IReadOnlyList<VirtualPath> textures = SceneryArea.Textures(package, 52.46, 9.68, out int tiles);
 
         Assert.Equal(2, tiles);
         Assert.Equal(["21552_34576_BI16.dds", "21584_34464_BI18.dds", "21600_34608_BI16.dds"], textures.Select(t => t.Name));
-        Assert.Empty(DepartureArea.Textures(_tree.PathOf("none"), 52.46, 9.68, out int none));
+        Assert.Empty(SceneryArea.Textures(_tree.PathOf("none"), 52.46, 9.68, out int none));
         Assert.Equal(0, none);
     }
 }

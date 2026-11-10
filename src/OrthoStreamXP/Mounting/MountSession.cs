@@ -30,6 +30,8 @@ internal sealed class MountSession : IDisposable
     private ColourMatcher? _colours;
     private Task? _summaryLoop, _sampleLoop, _departure;
     private HttpClient? _simBrief;
+    /// <summary>The ground pre-warm, once the flight plan is asked for; told every position X-Plane sends.</summary>
+    private volatile GroundPrewarm? _ground;
     private bool _stopped;
 
     private MountSession(MountSettings settings)
@@ -166,6 +168,7 @@ internal sealed class MountSession : IDisposable
                 {
                     _view.Update(camera);
                     readLog?.Camera(camera);
+                    _ground?.OnCamera(camera);
                 },
                 streaming
                     ? (width, fieldOfView) =>
@@ -218,9 +221,15 @@ internal sealed class MountSession : IDisposable
         _simBrief.DefaultRequestHeaders.UserAgent.ParseAdd("orthostreamxp");
         var client = new SimBriefClient(_simBrief);
         AircraftPositionListener? listener = _listener;
-        var prefetch = new DeparturePrefetch(ct => client.LatestOriginAsync(user, ct),
-            () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, targets, _settings.SimBriefRadiusKm);
         CancellationToken stop = _summaries.Token;
+        // One flight plan for the departure prefetch and the ground pre-warm.
+        Task<FlightPlan?> plan = client.LatestPlanAsync(user, stop);
+        var prefetch = new DeparturePrefetch(async ct => (await plan.WaitAsync(ct).ConfigureAwait(false))?.Origin,
+            () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, targets, _settings.SimBriefRadiusKm);
+        GroundTarget[] ground = [.. _mounts.Where(m => m.Warmer is not null)
+            .Select(m => (Mount: m, Warmer: m.Warmer!))
+            .Select(m => new GroundTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, m.Warmer.PrefetchGround, m.Warmer.CancelGround))];
+        if (ground.Length > 0 && listener is not null) _ground = new GroundPrewarm(plan, ground);
         _departure = Task.Run(async () =>
         {
             try

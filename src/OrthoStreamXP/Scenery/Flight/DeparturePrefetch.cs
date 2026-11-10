@@ -13,7 +13,7 @@ internal sealed record DepartureTarget(string Name, string Source, Func<VirtualP
 /// <summary>
 /// Builds the scenery around the departure airport of the latest SimBrief flight plan as the mount starts, before
 /// X-Plane loads it: X-Plane's first load at the gate then finds it in the cache. With mip streaming that is every
-/// texture of the DSF tiles X-Plane loads there (<see cref="DepartureArea"/>), each to the level X-Plane will want;
+/// texture of the DSF tiles X-Plane loads there (<see cref="SceneryArea"/>), each to the level X-Plane will want;
 /// otherwise (or when the package's DSFs cannot be read) the textures within <c>radiusKm</c> at full detail. What
 /// the cache has already is left alone; X-Plane's own reads still come first in the download queue.
 /// </summary>
@@ -44,7 +44,7 @@ internal sealed class DeparturePrefetch(Func<CancellationToken, Task<FlightOrigi
             ct.ThrowIfCancellationRequested();
             if (target.PrefetchArea is { } prefetchArea)
             {
-                IReadOnlyList<VirtualPath> area = DepartureArea.Textures(target.Source, from.Lat, from.Lon, out int tiles);
+                IReadOnlyList<VirtualPath> area = SceneryArea.Textures(target.Source, from.Lat, from.Lon, out int tiles);
                 if (area.Count > 0)
                 {
                     var (areaQueued, had) = prefetchArea(area, from.Lat, from.Lon);

@@ -47,9 +47,11 @@ internal sealed class MipWarmer : IDisposable
     /// <summary>
     /// A texture to warm; <paramref name="Mip"/> and <paramref name="Priority"/> fixed for the flight-path and departure
     /// prefetch. <paramref name="Recheck"/>: queued again because the aircraft moved, not because X-Plane loaded it.
-    /// <paramref name="Distance"/>: from the departure, for the order until X-Plane sends a position.
+    /// <paramref name="Distance"/>: the order among the prefetch's own requests (from the departure, or along the route).
+    /// <paramref name="Ground"/>: the ground pre-warm's, dropped when the aircraft rolls for takeoff.
     /// </summary>
-    private readonly record struct Request(VirtualPath Texture, int? Mip = null, int? Priority = null, bool Recheck = false, double? Distance = null);
+    private readonly record struct Request(VirtualPath Texture, int? Mip = null, int? Priority = null, bool Recheck = false, double? Distance = null,
+        bool Ground = false);
 
     private readonly TextureCatalog _catalog;
     private readonly TextureStreamer _streamer;
@@ -126,14 +128,54 @@ internal sealed class MipWarmer : IDisposable
     /// the same choice load-ahead makes once X-Plane sends a position, only made before X-Plane opens anything.
     /// Returns how many were queued and how many had what they need already.
     /// </summary>
-    public (int Queued, int Had) PrefetchAround(IReadOnlyList<VirtualPath> textures, double lat, double lon)
+    public (int Queued, int Had) PrefetchAround(IReadOnlyList<VirtualPath> textures, double lat, double lon) =>
+        PrefetchPlaced(textures, (tLat, tLon) =>
+        {
+            double d = Geo.DistanceM(lat, lon, tLat, tLon);
+            return (d, d);
+        }, phase: null);
+
+    /// <summary>
+    /// The ground pre-warm (<see cref="GroundPrewarm"/>): textures of the arrival, the alternate or the climb, each to
+    /// the level X-Plane will want from <paramref name="place"/>'s distance, ordered by its second value, below
+    /// everything X-Plane and the departure need (and the phases in their order: arrival, alternate, climb). A texture
+    /// already waiting for load-ahead or the departure keeps that request. Returns how many were queued and how many
+    /// had what they need already.
+    /// </summary>
+    public (int Queued, int Had) PrefetchGround(IReadOnlyList<VirtualPath> textures, Func<double, double, (double DistanceM, double Order)> place, int phase) =>
+        PrefetchPlaced(textures, place, phase);
+
+    /// <summary>Drops the ground pre-warm's requests still waiting (the aircraft rolls for takeoff); returns how many.</summary>
+    public int CancelGround()
+    {
+        int dropped;
+        lock (_gate)
+        {
+            string[] ground = [.. _waiting.Where(w => w.Value.Ground).Select(w => w.Key)];
+            foreach (string key in ground) _waiting.Remove(key);
+            dropped = ground.Length;
+        }
+        Wake();
+        return dropped;
+    }
+
+    /// <summary>The ground pre-warm's requests still waiting.</summary>
+    public int GroundWaiting
+    {
+        get
+        {
+            lock (_gate) return _waiting.Values.Count(w => w.Ground);
+        }
+    }
+
+    private (int Queued, int Had) PrefetchPlaced(IReadOnlyList<VirtualPath> textures, Func<double, double, (double DistanceM, double Order)> place, int? phase)
     {
         var requests = new List<Request>(textures.Count);
         int had = 0;
         foreach (VirtualPath texture in textures)
         {
             if (_streamer.Get(texture) is not { } t) continue;
-            double distance = Geo.DistanceM(lat, lon, t.Lat, t.Lon);
+            var (distance, order) = place(t.Lat, t.Lon);
             int wanted = _streamer.Model.MipFor(distance, t.SizeM, t.Layout.Size);
             int mip = Math.Min(wanted, Coarsest(t));
             int real = _streamer.RealFrom(t);
@@ -142,15 +184,21 @@ internal sealed class MipWarmer : IDisposable
                 had++;
                 continue;
             }
-            // Far ones are only their base tile: before the middle levels, as X-Plane reads far scenery first.
-            int priority = mip >= Coarsest(t) ? FetchPriority.Warm : PriorityOf(t, wanted);
-            requests.Add(new Request(texture, mip, priority, Distance: distance));
+            // Far ones are only their base tile: before the middle levels, as X-Plane reads far scenery first. The ground
+            // pre-warm's phases come after all of it, in their order.
+            int priority = phase is int p ? GroundPriority(p) : mip >= Coarsest(t) ? FetchPriority.Warm : PriorityOf(t, wanted);
+            requests.Add(new Request(texture, mip, priority, Distance: order, Ground: phase is not null));
         }
+        int queued = 0;
         lock (_gate)
             foreach (Request request in requests)
+            {
+                if (request.Ground && _waiting.ContainsKey(request.Texture.Key)) continue;
                 _waiting[request.Texture.Key] = request;
+                queued++;
+            }
         Wake();
-        return (requests.Count, had);
+        return (queued, had);
     }
 
     /// <summary>
@@ -159,6 +207,9 @@ internal sealed class MipWarmer : IDisposable
     /// such texture wait while X-Plane loaded it (926 of 3,554 at EDDV).
     /// </summary>
     private static int Coarsest(StreamedTexture t) => Math.Min(t.BaseMip, ReadPattern.CoarsestRead(t.Layout));
+
+    /// <summary>A ground pre-warm phase's priority: after everything else, the phases in their order.</summary>
+    internal static int GroundPriority(int phase) => FetchPriority.Background + 1 + phase;
 
     /// <summary>A load-ahead build's priority by the band X-Plane will read the texture in.</summary>
     private static int PriorityOf(StreamedTexture t, int wanted) => TextureStreamer.BandOf(t, wanted) switch
@@ -189,12 +240,12 @@ internal sealed class MipWarmer : IDisposable
         // that is whole already: the low-zoom base there (far scenery, colour matching, the report's map) would stay
         // empty. And a far texture X-Plane reads before its base tile arrives gets one flat colour.
         if (mip is int asked && asked < t.BaseMip && _streamer.RealFrom(t) > t.BaseMip)
-            return (t, t.BaseMip, Math.Min(priority ?? FetchPriority.Warm, FetchPriority.Warm),
-                _view.Current is { } at ? ViewTracker.DistanceM(at, t.Lat, t.Lon) : departureDistance ?? double.MaxValue);
+            return (t, t.BaseMip, priority is int ground && ground > FetchPriority.Background ? ground : Math.Min(priority ?? FetchPriority.Warm, FetchPriority.Warm),
+                departureDistance ?? (_view.Current is { } at ? ViewTracker.DistanceM(at, t.Lat, t.Lon) : double.MaxValue));
         if (_view.Current is not { } camera)
             return (t, mip ?? Coarsest(t), priority ?? FetchPriority.Background, departureDistance ?? double.MaxValue);
         double distance = ViewTracker.DistanceM(camera, t.Lat, t.Lon);
-        if (mip is int fixedMip) return (t, fixedMip, priority ?? FetchPriority.Warm, distance);
+        if (mip is int fixedMip) return (t, fixedMip, priority ?? FetchPriority.Warm, departureDistance ?? distance);
 
         double soon = distance;
         if (camera.Motion is { SpeedMps: >= PrefetchPlanner.MovingSpeedMps } motion)
