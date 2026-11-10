@@ -70,6 +70,26 @@ public sealed class SimBriefPrefetchTests : IDisposable
         Assert.Null(noOrigin);
     }
 
+    [Fact]
+    public async Task The_connection_test_names_the_flight_or_says_why_there_is_none()
+    {
+        using var ok = new StubHandler(HttpStatusCode.OK, Ofp);
+        using var unknown = new StubHandler(HttpStatusCode.BadRequest, """{"fetch":{"status":"Error: Unknown UserID"}}""");
+        using var okHttp = new HttpClient(ok);
+        using var unknownHttp = new HttpClient(unknown);
+        CancellationToken ct = TestContext.Current.CancellationToken;
+
+        SimBriefAnswer found = await new SimBriefClient(okHttp).FetchAsync("pilot", ct);
+        SimBriefAnswer missing = await new SimBriefClient(unknownHttp).FetchAsync("nobody", ct);
+        SimBriefAnswer empty = await new SimBriefClient(okHttp).FetchAsync("  ", ct);
+
+        Assert.Equal("EGLL", found.Destination);
+        Assert.Contains("EDDM → EGLL", Gui.SimBriefTestViewModel.Describe(found), StringComparison.Ordinal);
+        Assert.Equal("No flight plan: Unknown UserID.", Gui.SimBriefTestViewModel.Describe(missing));
+        Assert.Null(empty.Origin);
+        Assert.NotNull(empty.Problem);
+    }
+
     // ---------------------------------------------------------------- the package's textures there
 
     private string Package(params TextureName[] textures)

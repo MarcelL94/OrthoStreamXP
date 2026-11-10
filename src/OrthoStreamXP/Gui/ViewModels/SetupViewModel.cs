@@ -30,17 +30,19 @@ internal sealed class FolderOption(string path, string description, Action<Folde
 
 /// <summary>
 /// The first-run setup: checks WinFsp, finds X-Plane, asks for the folder of the person's own scenery packages,
-/// and lets them pick a cache folder and a quality; then writes orthostreamxp.ini.
+/// lets them pick a cache folder and a quality, and optionally their SimBrief account (departure prefetch); then writes
+/// orthostreamxp.ini.
 /// </summary>
 internal sealed class SetupViewModel : ObservableObject
 {
-    public static readonly string[] StepTitles = ["Welcome", "X-Plane", "Scenery", "Cache", "Quality", "Ready"];
+    public static readonly string[] StepTitles = ["Welcome", "X-Plane", "Scenery", "Cache", "Quality", "SimBrief", "Ready"];
 
     private readonly MainViewModel _main;
     private int _step;
     private bool _winFsp;
     private string? _xplane, _packages;
     private string _cache;
+    private string _simBriefUser;
     /// <summary>The cache folder came from the settings or the person: it no longer follows the packages folder.</summary>
     private bool _cacheChosen;
     private QualityPreset _preset = PresetMemory.Recommended.Preset;
@@ -71,6 +73,8 @@ internal sealed class SetupViewModel : ObservableObject
         QualityPreset recommended = PresetMemory.Recommended.Preset;
         Preset = QualityPreset.ForLevel(existing.GetInt("level-change") ?? recommended.Level) ?? recommended;
         IsRerun = existing.Get("cache") is not null;
+        _simBriefUser = existing.Get("simbrief-user") ?? "";
+        SimBriefTest = new SimBriefTestViewModel(_main.MeshHttp, () => SimBriefUser);
         ConnectionTest = new ConnectionTestViewModel(
             () => existing.Get("texture-provider") ?? "bing,esri",
             () => _main.Mount.State == MountState.Stopped,
@@ -146,6 +150,8 @@ internal sealed class SetupViewModel : ObservableObject
     public ObservableCollection<FolderOption> XPlaneOptions { get; }
     public ObservableCollection<FolderOption> PackageOptions { get; }
     public IReadOnlyList<PresetOption> Presets { get; }
+    /// <summary>The SimBrief step's "Test SimBrief connection".</summary>
+    public SimBriefTestViewModel SimBriefTest { get; }
     /// <summary>The connection test above the presets: the recommendation follows its speed.</summary>
     public ConnectionTestViewModel ConnectionTest { get; }
     public ICommand Back { get; }
@@ -275,6 +281,18 @@ internal sealed class SetupViewModel : ObservableObject
         }
     }
 
+    /// <summary>SimBrief username or Pilot ID (optional): the departure of the latest flight plan is built ahead.</summary>
+    public string SimBriefUser
+    {
+        get => _simBriefUser;
+        set
+        {
+            if (!Set(ref _simBriefUser, value?.Trim() ?? "")) return;
+            SimBriefTest.Reset();
+            Raise(nameof(Summary));
+        }
+    }
+
     public bool StartNow
     {
         get => _startNow;
@@ -283,7 +301,8 @@ internal sealed class SetupViewModel : ObservableObject
 
     public string Summary =>
         $"X-Plane: {_xplane}\nScenery packages: {string.Join(", ", SystemCheck.PackagesIn(_packages))} in {_packages}\n" +
-        $"Quality: {Preset.Name}\nCache: {CacheFolder}";
+        $"Quality: {Preset.Name}\nCache: {CacheFolder}\n" +
+        $"SimBrief: {(SimBriefUser.Length > 0 ? $"{SimBriefUser} (the departure airport's photos are built ahead)" : "not used")}";
 
     public string? Error
     {
@@ -373,6 +392,7 @@ internal sealed class SetupViewModel : ObservableObject
                 settings = SettingsDocument.CreateNew(path, _xplane!, _packages!, CacheFolder, Preset);
             }
             if (_testedWorkers is { } workers) settings.Set("download-workers", workers);
+            settings.Set("simbrief-user", SimBriefUser.Length > 0 ? SimBriefUser : null);
             Directory.CreateDirectory(CacheFolder);
             settings.Save();
             Log.Info($"Setup saved the settings to {path}");
