@@ -36,7 +36,7 @@ Each card shows the imagery zoom, the metres per pixel, roughly how long a new a
 ![Settings: Folders](images/settings-folders.png)
 
 - **X-Plane folder:** the X-Plane installation where the packages appear (in its `Custom Scenery` folder).
-- **Scenery packages folder:** the parent folder of your packages. The line below it lists the packages found.
+- **Scenery packages folder:** the parent folder of your packages. The line below it lists the packages found. Keep the packages of each source (regions downloaded in OrthoStreamXP, Ortho4XP, OrthoStudio XP...) in a folder of their own, and choose here the one you fly with: see [Packages › One folder per source](packages.md#one-folder-per-source).
 - **Cache folder:** where the textures are kept. The line below it shows the free space and how much a new area takes at the current texture size.
 
 ## Pictures and download

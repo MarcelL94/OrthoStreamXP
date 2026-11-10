@@ -71,6 +71,8 @@ Do not choose a package itself (`Europe`) or a folder further down (`Earth nav d
 
 For XPME, this is usually XPME's top folder. For AutoOrtho, it is usually the `scenery` folder in AutoOrtho's folder (for example `z_autoortho\scenery`), after you move it out of `Custom Scenery` (see the next question). Check where the `Earth nav data` folders are: the folder you choose is the one two levels above them.
 
+Have packages from more than one tool? Keep each tool's packages, and the regions downloaded in OrthoStreamXP, in a folder of their own, and choose the one you fly with. See [Packages › One folder per source](packages.md#one-folder-per-source).
+
 ### Can my packages stay in X-Plane's Custom Scenery folder?
 
 No. Move them anywhere else on your PC, for example `D:\OrthoPackages`. OrthoStreamXP shows them in `Custom Scenery` itself while it runs; if they were already there, X-Plane would see each package twice and OrthoStreamXP refuses to start.

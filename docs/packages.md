@@ -2,7 +2,7 @@
 
 [User guide](README.md) › Packages
 
-OrthoStreamXP streams photos onto scenery packages: the ground's shape (the mesh) for each area. The quickest way to get them is to download the mesh of a whole region, on the **Packages** page or in the **Scenery packages** step of the setup. You can also use packages of your own, or both together.
+OrthoStreamXP streams photos onto scenery packages: the ground's shape (the mesh) for each area. The quickest way to get them is to download the mesh of a whole region, on the **Packages** page or in the **Scenery packages** step of the setup. You can also use packages of your own; keep them in a folder of their own (see [One folder per source](#one-folder-per-source)).
 
 ![The Packages page, with Australia and the Pacific installed](images/packages.png)
 
@@ -21,11 +21,29 @@ The page shows the exact sizes of the current release.
 
 ## Where they go
 
-Each region is installed as a package of its own in your **scenery packages folder**, beside your own packages. If you download one during the setup and have not chosen a folder yet, it goes to `OrthoStreamXP\Base Packages` in your user folder, and that folder becomes your scenery packages folder.
-
-Your own packages stay **above** the downloaded regions in X-Plane's scenery list. Where both cover the same area, X-Plane shows yours.
+Each region is installed as a package of its own in the **scenery packages folder** chosen in [Settings › Folders](settings.md#folders). If you download one during the setup and have not chosen a folder yet, it goes to `OrthoStreamXP\Base Packages` in your user folder, and that folder becomes your scenery packages folder.
 
 Leave about 1.7 times the download size free on the drive: the files take more room once they are unpacked.
+
+## One folder per source
+
+Keep the downloaded regions in a folder of their own, and the packages of each other tool (Ortho4XP, OrthoStudio XP, XPME, AutoOrtho) in theirs. For example:
+
+```
+D:\Scenery\OrthoStream\    <- the regions downloaded in OrthoStreamXP
+D:\Scenery\Ortho4XP\       <- your Ortho4XP tiles
+D:\Scenery\OrthoStudio\    <- your OrthoStudio XP packages
+```
+
+Why:
+
+- **No doubled scenery.** A downloaded region covers a whole continent. Packages from two sources for the same area bring two meshes, and often two sets of roads, forests and buildings, which can show twice.
+- **Each tool keeps its own folder.** Ortho4XP, OrthoStudio XP and the others update and delete their packages in their folders. Mixed with packages from elsewhere, it is easy to delete or overwrite the wrong one, and hard to tell which tool a package (and a problem with it) comes from.
+- **Easy to switch.** To fly with another source, choose its folder in [Settings › Folders](settings.md#folders), with the scenery stopped. Your packages stay as they are, and each keeps its textures in the cache.
+
+OrthoStreamXP uses one scenery packages folder at a time, so you fly with one source at a time.
+
+The **Packages** page installs into the folder chosen at that moment, shown at the top of the page. Before you download a region, check that it is your folder for downloaded regions, not your own packages' folder. Don't have one yet? Choose a new, empty folder in [Settings › Folders](settings.md#folders), then install. Home warns that no scenery packages were found until the first region is in it.
 
 ## Roads, forests and buildings
 

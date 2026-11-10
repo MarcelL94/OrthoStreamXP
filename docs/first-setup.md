@@ -58,6 +58,7 @@ D:\OrthoPackages\
         ...
 ```
 
+- Keep packages from different tools (Ortho4XP, OrthoStudio XP...) in separate folders, and keep them apart from regions downloaded in OrthoStreamXP: see [Packages › One folder per source](packages.md#one-folder-per-source).
 - Your packages stay unchanged on disk. While OrthoStreamXP runs, they appear in X-Plane's `Custom Scenery` folder with the photos added. When it stops, they disappear from there again.
 - If the hint turns red, *That folder has no scenery packages*, you probably picked one package instead of the folder that holds them: check that each package has an `Earth nav data` folder inside it.
 - If X-Plane's `Custom Scenery` already contains a folder with the same name as one of your packages, you get a warning. Usually another streaming tool still shows that package there; close that tool before you start OrthoStreamXP and check your scenery_packs.ini file.
