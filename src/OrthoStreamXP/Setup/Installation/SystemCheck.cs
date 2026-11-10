@@ -94,10 +94,17 @@ internal static class SystemCheck
         return File.Exists(exe) ? exe : null;
     }
 
-    /// <summary>Starts X-Plane from its folder, as a double-click on X-Plane.exe would.</summary>
+    /// <summary>
+    /// Starts X-Plane from its folder, as a double-click on X-Plane.exe would: through the desktop's Explorer, so it does not
+    /// inherit this program's environment (directly only when Explorer cannot).
+    /// </summary>
     /// <param name="arguments">Added to its command line, such as --allow_reshade; null or empty for none.</param>
-    public static void StartXPlane(string program, string? arguments = null) =>
-        Process.Start(new ProcessStartInfo(program, arguments?.Trim() ?? "") { WorkingDirectory = Path.GetDirectoryName(program)!, UseShellExecute = true })?.Dispose();
+    public static void StartXPlane(string program, string? arguments = null)
+    {
+        string folder = Path.GetDirectoryName(program)!, options = arguments?.Trim() ?? "";
+        if (DesktopShell.TryStart(program, options, folder)) return;
+        Process.Start(new ProcessStartInfo(program, options) { WorkingDirectory = folder, UseShellExecute = true })?.Dispose();
+    }
 
     public static bool IsXPlaneRunning()
     {
