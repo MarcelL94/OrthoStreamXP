@@ -25,6 +25,7 @@ internal sealed partial class App
         Log.Configure(LogOutput.None, null);
         DispatcherUnhandledException += OnUnhandledException;
         _main = new MainViewModel();
+        _main.Preferences.Theme.Apply();
         var window = new MainWindow(_main);
         MainWindow = window;
         window.Show();
