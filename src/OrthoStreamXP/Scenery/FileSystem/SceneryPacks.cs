@@ -11,8 +11,8 @@ internal static class SceneryPacks
 {
     public const string FileName = "scenery_packs.ini";
 
-    /// <summary>The names of the packages OrthoStreamXP downloads itself (OSXP_Eur, OSXP_Overlays...).</summary>
-    public const string DownloadedPrefix = "OSXP_";
+    /// <summary>The names of the packages OrthoStreamXP downloads itself (OrthoStream_Eur, OrthoStream_Overlays...).</summary>
+    public const string DownloadedPrefix = "OrthoStream_";
     private const string Enabled = "SCENERY_PACK ", Disabled = "SCENERY_PACK_DISABLED ";
     private static readonly string[] NewFileHeader = ["I", "1000 Version", "SCENERY", ""];
 
@@ -56,6 +56,46 @@ internal static class SceneryPacks
         if (text is not null) File.Copy(file, file + ".bak", overwrite: true);
         AtomicFile.Write(file, Encoding.UTF8.GetBytes(string.Join(newline, updated) + newline));
         return true;
+    }
+
+    /// <summary>
+    /// Renames the entries of packages that took a new name (<paramref name="names"/>: old and new) in scenery_packs.ini,
+    /// in place: their position and whether they are disabled stay. The previous file is kept as scenery_packs.ini.bak.
+    /// Returns whether the file changed.
+    /// </summary>
+    public static bool RenameEntries(string customScenery, IReadOnlyList<(string Old, string New)> names)
+    {
+        string file = Path.Join(customScenery, FileName);
+        if (!File.Exists(file)) return false;
+        string text = File.ReadAllText(file);
+        string[] lines = text.ReplaceLineEndings("\n").TrimEnd('\n').Split('\n');
+        List<string> updated = Rename(lines, names);
+        if (lines.SequenceEqual(updated)) return false;
+        string newline = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        File.Copy(file, file + ".bak", overwrite: true);
+        AtomicFile.Write(file, Encoding.UTF8.GetBytes(string.Join(newline, updated) + newline));
+        return true;
+    }
+
+    /// <summary>The lines with each old name's entry naming the new one instead; one already listed under its new name keeps only that entry.</summary>
+    internal static List<string> Rename(IReadOnlyList<string> lines, IReadOnlyList<(string Old, string New)> names)
+    {
+        string[] olds = [.. names.Select(n => n.Old)], news = [.. names.Select(n => n.New)];
+        var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string line in lines)
+            if (PackageOf(line, news, out _) is { } name) listed.Add(name);
+        var updated = new List<string>(lines.Count);
+        foreach (string line in lines)
+        {
+            if (PackageOf(line, olds, out bool isDisabled) is not { } old)
+            {
+                updated.Add(line);
+                continue;
+            }
+            string renamed = names.First(n => n.Old.Equals(old, StringComparison.OrdinalIgnoreCase)).New;
+            if (listed.Add(renamed)) updated.Add($"{(isDisabled ? Disabled : Enabled)}Custom Scenery/{renamed}/");
+        }
+        return updated;
     }
 
     /// <summary>

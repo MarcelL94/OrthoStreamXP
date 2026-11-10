@@ -9,7 +9,7 @@ namespace OrthoStreamXP.Setup;
 /// </summary>
 internal sealed class OverlayPackage(string packagesFolder)
 {
-    private const string RecordName = ".orthostreamxp-overlays.json";
+    public const string RecordName = ".orthostreamxp-overlays.json";
 
     public string Folder { get; } = Path.Join(packagesFolder, MeshRegion.OverlaysPackageName);
 

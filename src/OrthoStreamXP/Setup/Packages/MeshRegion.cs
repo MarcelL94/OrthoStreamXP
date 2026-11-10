@@ -19,12 +19,12 @@ internal sealed record MeshRegion(string Id, string Release, IReadOnlyList<MeshA
     /// <summary>The regions in the order they are listed, with their names and their packages' names.</summary>
     public static readonly IReadOnlyList<(string Id, string Name, string Package)> Known =
     [
-        ("eur", "Europe", "OSXP_Eur"),
-        ("na", "North America", "OSXP_NA"),
-        ("sa", "South America", "OSXP_SA"),
-        ("afr", "Africa", "OSXP_Afr"),
-        ("asi", "Asia", "OSXP_Asi"),
-        ("aus_pac", "Australia and the Pacific", "OSXP_AusPac"),
+        ("eur", "Europe", SceneryPacks.DownloadedPrefix + "Eur"),
+        ("na", "North America", SceneryPacks.DownloadedPrefix + "NA"),
+        ("sa", "South America", SceneryPacks.DownloadedPrefix + "SA"),
+        ("afr", "Africa", SceneryPacks.DownloadedPrefix + "Afr"),
+        ("asi", "Asia", SceneryPacks.DownloadedPrefix + "Asi"),
+        ("aus_pac", "Australia and the Pacific", SceneryPacks.DownloadedPrefix + "AusPac"),
     ];
 
     public static bool IsKnown(string id) => Known.Any(k => k.Id == id);

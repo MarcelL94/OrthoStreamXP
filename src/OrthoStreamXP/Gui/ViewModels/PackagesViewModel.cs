@@ -189,6 +189,11 @@ internal sealed class PackagesViewModel : ObservableObject, IPage
         {
             await Task.Run(() => Installer(folder).Delete(row.Region.Id)).ConfigureAwait(true);
         }
+        catch (InstallException ex)
+        {
+            row.Error = ex.Message;
+            Log.Warning(row.Error);
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             row.Error = $"The {row.Name} mesh could not be deleted: {ex.Message}";

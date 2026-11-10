@@ -10,12 +10,12 @@ The meshes are downloaded from a public collection on [GitHub](https://github.co
 
 | Region | Package | Download (with roads, forests and buildings) |
 |---|---|---|
-| Europe | `OSXP_Eur` | about 16 GB |
-| North America | `OSXP_NA` | about 25 GB |
-| South America | `OSXP_SA` | about 9 GB |
-| Africa | `OSXP_Afr` | about 12 GB |
-| Asia | `OSXP_Asi` | about 33 GB |
-| Australia and the Pacific | `OSXP_AusPac` | about 6 GB |
+| Europe | `OrthoStream_Eur` | about 16 GB |
+| North America | `OrthoStream_NA` | about 25 GB |
+| South America | `OrthoStream_SA` | about 9 GB |
+| Africa | `OrthoStream_Afr` | about 12 GB |
+| Asia | `OrthoStream_Asi` | about 33 GB |
+| Australia and the Pacific | `OrthoStream_AusPac` | about 6 GB |
 
 The page shows the exact sizes of the current release.
 
@@ -29,7 +29,7 @@ Leave about 1.7 times the download size free on the drive: the files take more r
 
 ## Roads, forests and buildings
 
-A square of a downloaded mesh no longer shows X-Plane's own roads, forests and buildings. **Roads, forests and buildings** downloads them with each region, into one shared package, `OSXP_Overlays`. Turn it off if another package of yours already brings them. The choice applies to the next region you install or update.
+A square of a downloaded mesh no longer shows X-Plane's own roads, forests and buildings. **Roads, forests and buildings** downloads them with each region, into one shared package, `OrthoStream_Overlays`. Turn it off if another package of yours already brings them. The choice applies to the next region you install or update.
 
 ## Downloading, stopping and resuming
 

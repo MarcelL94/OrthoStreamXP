@@ -1,5 +1,6 @@
 using System.Runtime.ExceptionServices;
 using System.Text.Json;
+using OrthoStreamXP.Scenery;
 
 namespace OrthoStreamXP.Setup;
 
@@ -16,7 +17,7 @@ internal sealed class InstallException(string message, Exception? inner = null) 
 /// Installs, updates and deletes the regions of AutoOrtho's mesh in the scenery packages folder, each as a package of its
 /// own (<see cref="MeshRegion.PackageName"/>) beside the person's other packages, its overlays in the shared overlays package.
 /// <para>
-/// Everything is prepared in the hidden <c>.osxp-download</c> folder there, which is no package (it has no Earth nav data): a
+/// Everything is prepared in the hidden <c>.orthostream-download</c> folder there, which is no package (it has no Earth nav data): a
 /// zip is unpacked as soon as it is whole, then deleted, and a record of the zips unpacked lets a stopped install go on
 /// where it was. The region takes its place only once all of it is there, with its marker written last, so X-Plane never
 /// sees half a region. An update is prepared the same way and swapped in at the end.
@@ -25,7 +26,7 @@ internal sealed class InstallException(string message, Exception? inner = null) 
 internal sealed class RegionInstaller(AssetDownload download, string packagesFolder)
 {
     public const string MarkerName = ".orthostreamxp-region.json";
-    public const string WorkFolderName = ".osxp-download";
+    public const string WorkFolderName = ".orthostream-download";
     /// <summary>Unpacked, a region takes about this much more than its zips (DSFs grow, each small .ter takes a whole disk block).</summary>
     private const double UnpackedRatio = 1.7;
     private const long SpareBytes = 2L << 30;
@@ -44,7 +45,9 @@ internal sealed class RegionInstaller(AssetDownload download, string packagesFol
         var found = new Dictionary<string, InstalledRegion>();
         foreach (var (id, _, package) in MeshRegion.Known)
         {
-            string marker = Path.Join(PackagesFolder, package, MarkerName);
+            // Still under its old name when it was in use at the start: renamed before anything is installed or deleted.
+            string folder = LegacyPackageNames.OldFolderOf(PackagesFolder, package) ?? Path.Join(PackagesFolder, package);
+            string marker = Path.Join(folder, MarkerName);
             try
             {
                 if (File.Exists(marker) && JsonSerializer.Deserialize<InstalledRegion>(File.ReadAllText(marker)) is { } region)
@@ -75,6 +78,7 @@ internal sealed class RegionInstaller(AssetDownload download, string packagesFol
     public async Task InstallAsync(MeshRegion region, bool withOverlays, IProgress<InstallProgress> progress, CancellationToken cancel)
     {
         CheckRegion(region);
+        MoveOldNames();
         string work = WorkOf(region);
         PrepareWork(region, work);
         State state = LoadState(work);
@@ -196,8 +200,10 @@ internal sealed class RegionInstaller(AssetDownload download, string packagesFol
     }
 
     /// <summary>Deletes an installed region and its overlays.</summary>
+    /// <exception cref="InstallException">A package still under its old name could not be renamed.</exception>
     public void Delete(string regionId)
     {
+        MoveOldNames();
         string package = Path.Join(PackagesFolder, MeshRegion.PackageOf(regionId));
         // The marker first: a region half deleted is no longer taken for installed.
         string marker = Path.Join(package, MarkerName);
@@ -232,6 +238,18 @@ internal sealed class RegionInstaller(AssetDownload download, string packagesFol
         Directory.Delete(work, recursive: true);
         DeleteIfEmpty(Path.GetDirectoryName(work)!);
         DeleteIfEmpty(WorkRoot);
+    }
+
+    /// <summary>
+    /// Renames what an earlier version installed (<see cref="LegacyPackageNames"/>) first: installed or deleted under the new
+    /// name alone, a region would be in the packages folder twice, or not deleted.
+    /// </summary>
+    private void MoveOldNames()
+    {
+        IReadOnlyList<string> left = LegacyPackageNames.MovePackages(PackagesFolder);
+        if (left.Count == 0) return;
+        throw new InstallException($"{string.Join(", ", left)} in {PackagesFolder} could not take its new name ({SceneryPacks.DownloadedPrefix}...). " +
+                                   "Close what uses it, such as File Explorer, or remove the folder of the new name if one is there, and try again.");
     }
 
     private static void DeleteIfEmpty(string folder)

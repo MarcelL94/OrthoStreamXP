@@ -66,7 +66,7 @@ public sealed class MeshPackagesTests : IDisposable
         Assert.Equal("0.0.51", eur.Release);
         Assert.Equal(["z_eur_00.zip"], eur.Mesh.Select(a => a.Name));
         Assert.Equal(["y_eur_overlays.zip.00", "y_eur_overlays.zip.01", "y_eur_overlays.zip.02"], eur.Overlays.Select(a => a.Name));
-        Assert.Equal("OSXP_Eur", eur.PackageName);
+        Assert.Equal("OrthoStream_Eur", eur.PackageName);
         MeshRegion na = regions[1];
         Assert.Equal(["z_na_00.zip", "z_na_01.zip"], na.Mesh.Select(a => a.Name));
         Assert.Equal("u/z_na_00.zip.sha256", na.Mesh[0].Sha256Url);
@@ -86,15 +86,15 @@ public sealed class MeshPackagesTests : IDisposable
 
         await Installer().InstallAsync(eur, withOverlays: true, NoProgress, CancellationToken.None);
 
-        Assert.Equal("dsf A", File.ReadAllText(Path.Join(Packages, "OSXP_Eur", "Earth nav data", "+40+000", "+45+005.dsf")));
-        Assert.Equal("dsf B", File.ReadAllText(Path.Join(Packages, "OSXP_Eur", "Earth nav data", "+50+010", "+51+011.dsf")));
-        Assert.Equal("ter A", File.ReadAllText(Path.Join(Packages, "OSXP_Eur", "terrain", "1_2_BI16.ter")));
-        Assert.Equal("overlay A", File.ReadAllText(Path.Join(Packages, "OSXP_Overlays", "Earth nav data", "+40+000", "+45+005.dsf")));
+        Assert.Equal("dsf A", File.ReadAllText(Path.Join(Packages, "OrthoStream_Eur", "Earth nav data", "+40+000", "+45+005.dsf")));
+        Assert.Equal("dsf B", File.ReadAllText(Path.Join(Packages, "OrthoStream_Eur", "Earth nav data", "+50+010", "+51+011.dsf")));
+        Assert.Equal("ter A", File.ReadAllText(Path.Join(Packages, "OrthoStream_Eur", "terrain", "1_2_BI16.ter")));
+        Assert.Equal("overlay A", File.ReadAllText(Path.Join(Packages, "OrthoStream_Overlays", "Earth nav data", "+40+000", "+45+005.dsf")));
         Assert.False(Directory.Exists(Path.Join(Packages, RegionInstaller.WorkFolderName)));
         InstalledRegion installed = Assert.Single(Installer().Installed()).Value;
         Assert.Equal(("eur", "0.0.51", true), (installed.Id, installed.Release, installed.Overlays));
         // Both are packages the mount picks up, the work folder never is.
-        Assert.Equal(["OSXP_Eur", "OSXP_Overlays"], SceneryPacks.FindPackages(Packages, out _).Select(Path.GetFileName));
+        Assert.Equal(["OrthoStream_Eur", "OrthoStream_Overlays"], SceneryPacks.FindPackages(Packages, out _).Select(Path.GetFileName));
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public sealed class MeshPackagesTests : IDisposable
 
         await Installer().InstallAsync(eur, withOverlays: false, NoProgress, CancellationToken.None);
 
-        Assert.False(Directory.Exists(Path.Join(Packages, "OSXP_Overlays")));
+        Assert.False(Directory.Exists(Path.Join(Packages, "OrthoStream_Overlays")));
         Assert.False(Installer().Installed()["eur"].Overlays);
         Assert.DoesNotContain(_server.Requests, r => r.Url.Contains("overlays", StringComparison.Ordinal));
     }
@@ -123,7 +123,7 @@ public sealed class MeshPackagesTests : IDisposable
         await Installer().InstallAsync(eur, withOverlays: true, NoProgress, CancellationToken.None);
 
         Assert.Equal(1000, Assert.Single(_server.Requests, r => r.Url.EndsWith("z_eur_00.zip", StringComparison.Ordinal)).From);
-        Assert.Equal(content, File.ReadAllText(Path.Join(Packages, "OSXP_Eur", "Earth nav data", "+40+000", "+45+005.dsf")));
+        Assert.Equal(content, File.ReadAllText(Path.Join(Packages, "OrthoStream_Eur", "Earth nav data", "+40+000", "+45+005.dsf")));
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public sealed class MeshPackagesTests : IDisposable
 
         Assert.Single(_server.Requests, r => r.Url.EndsWith("z_eur_00.zip", StringComparison.Ordinal));
         Assert.Single(_server.Requests, r => r.Url.EndsWith("z_eur_01.zip", StringComparison.Ordinal));
-        Assert.Equal("B", File.ReadAllText(Path.Join(Packages, "OSXP_Eur", "Earth nav data", "+50+010", "+51+011.dsf")));
+        Assert.Equal("B", File.ReadAllText(Path.Join(Packages, "OrthoStream_Eur", "Earth nav data", "+50+010", "+51+011.dsf")));
     }
 
     [Fact]
@@ -166,8 +166,8 @@ public sealed class MeshPackagesTests : IDisposable
         await Installer().InstallAsync(eur, withOverlays: true, NoProgress, CancellationToken.None);
 
         Assert.False(firstRecordedWhenSecondAsked); // asked before the first zip was unpacked and recorded
-        Assert.Equal(500, Directory.GetFiles(Path.Join(Packages, "OSXP_Eur", "terrain")).Length);
-        Assert.Equal("B", File.ReadAllText(Path.Join(Packages, "OSXP_Eur", "Earth nav data", "+50+010", "+51+011.dsf")));
+        Assert.Equal(500, Directory.GetFiles(Path.Join(Packages, "OrthoStream_Eur", "terrain")).Length);
+        Assert.Equal("B", File.ReadAllText(Path.Join(Packages, "OrthoStream_Eur", "Earth nav data", "+50+010", "+51+011.dsf")));
     }
 
     [Fact]
@@ -200,7 +200,7 @@ public sealed class MeshPackagesTests : IDisposable
 
         Assert.Contains("SHA-256", error.Message, StringComparison.Ordinal);
         Assert.False(File.Exists(Path.Join(Packages, RegionInstaller.WorkFolderName, "na", "1", "zips", "z_na_00.zip")));
-        Assert.False(Directory.Exists(Path.Join(Packages, "OSXP_NA")));
+        Assert.False(Directory.Exists(Path.Join(Packages, "OrthoStream_NA")));
     }
 
     [Fact]
@@ -215,7 +215,7 @@ public sealed class MeshPackagesTests : IDisposable
 
         await Installer().InstallAsync(na, true, NoProgress, CancellationToken.None);
 
-        Assert.True(File.Exists(Path.Join(Packages, "OSXP_NA", "Earth nav data", "+40-080", "+45-075.dsf")));
+        Assert.True(File.Exists(Path.Join(Packages, "OrthoStream_NA", "Earth nav data", "+40-080", "+45-075.dsf")));
     }
 
     [Fact]
@@ -275,9 +275,9 @@ public sealed class MeshPackagesTests : IDisposable
         await Installer().InstallAsync(Region("eur", "2", [Zip(("z_eur_00/Earth nav data/+40+000/+45+005.dsf", "new"))],
             Zip(("y/Earth nav data/+40+000/+45+005.dsf", "new overlay"))), true, NoProgress, CancellationToken.None);
 
-        Assert.Equal("new", File.ReadAllText(Path.Join(Packages, "OSXP_Eur", "Earth nav data", "+40+000", "+45+005.dsf")));
-        Assert.False(File.Exists(Path.Join(Packages, "OSXP_Eur", "terrain", "gone.ter")));
-        Assert.Equal("new overlay", File.ReadAllText(Path.Join(Packages, "OSXP_Overlays", "Earth nav data", "+40+000", "+45+005.dsf")));
+        Assert.Equal("new", File.ReadAllText(Path.Join(Packages, "OrthoStream_Eur", "Earth nav data", "+40+000", "+45+005.dsf")));
+        Assert.False(File.Exists(Path.Join(Packages, "OrthoStream_Eur", "terrain", "gone.ter")));
+        Assert.Equal("new overlay", File.ReadAllText(Path.Join(Packages, "OrthoStream_Overlays", "Earth nav data", "+40+000", "+45+005.dsf")));
         Assert.Equal("2", Installer().Installed()["eur"].Release);
     }
 
@@ -290,12 +290,12 @@ public sealed class MeshPackagesTests : IDisposable
         await Installer().InstallAsync(Region("afr", "1", [Zip(("z_afr_00/Earth nav data/+30+000/+31+001.dsf", "afr"))],
             Zip(("y/Earth nav data/+30+000/+35+005.dsf", "border, Africa's"), ("y/Earth nav data/+00+010/+05+015.dsf", "Africa only"))),
             true, NoProgress, CancellationToken.None);
-        string overlays = Path.Join(Packages, "OSXP_Overlays", "Earth nav data");
+        string overlays = Path.Join(Packages, "OrthoStream_Overlays", "Earth nav data");
         Assert.Equal("border, Europe's", File.ReadAllText(Path.Join(overlays, "+30+000", "+35+005.dsf"))); // placed first, kept
 
         Installer().Delete("afr");
 
-        Assert.False(Directory.Exists(Path.Join(Packages, "OSXP_Afr")));
+        Assert.False(Directory.Exists(Path.Join(Packages, "OrthoStream_Afr")));
         Assert.False(File.Exists(Path.Join(overlays, "+00+010", "+05+015.dsf")));
         Assert.False(Directory.Exists(Path.Join(overlays, "+00+010")));
         Assert.Equal("border, Europe's", File.ReadAllText(Path.Join(overlays, "+30+000", "+35+005.dsf")));
@@ -303,7 +303,7 @@ public sealed class MeshPackagesTests : IDisposable
 
         Installer().Delete("eur");
 
-        Assert.False(Directory.Exists(Path.Join(Packages, "OSXP_Overlays")));
+        Assert.False(Directory.Exists(Path.Join(Packages, "OrthoStream_Overlays")));
         Assert.Empty(Installer().Installed());
     }
 
@@ -343,15 +343,15 @@ public sealed class MeshPackagesTests : IDisposable
     public void The_downloaded_meshes_are_listed_below_the_persons_own_packages()
     {
         List<string> lines = SceneryPacks.Reorder(["I", "1000 Version", "SCENERY", ""],
-            ["OSXP_Eur", "OSXP_Overlays", "XPME_Europe", "yOrtho4XP_Overlays", "zOrtho4XP_+47+008"]);
+            ["OrthoStream_Eur", "OrthoStream_Overlays", "XPME_Europe", "yOrtho4XP_Overlays", "zOrtho4XP_+47+008"]);
 
         Assert.Equal([
             "I", "1000 Version", "SCENERY",
-            "SCENERY_PACK Custom Scenery/OSXP_Overlays/",
+            "SCENERY_PACK Custom Scenery/OrthoStream_Overlays/",
             "SCENERY_PACK Custom Scenery/yOrtho4XP_Overlays/",
             "SCENERY_PACK Custom Scenery/XPME_Europe/",
             "SCENERY_PACK Custom Scenery/zOrtho4XP_+47+008/",
-            "SCENERY_PACK Custom Scenery/OSXP_Eur/",
+            "SCENERY_PACK Custom Scenery/OrthoStream_Eur/",
         ], lines);
     }
 
