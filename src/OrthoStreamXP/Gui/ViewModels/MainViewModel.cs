@@ -84,7 +84,7 @@ internal sealed class MainViewModel : ObservableObject
         _selected = Navigation[0];
         HandleProblem = new RelayCommand<ProblemAction>(Handle);
         Donate = new RelayCommand(() => Shell.Open(AboutViewModel.DonationPage));
-        ChangeTheme = new RelayCommand(() => Theme = Theme.Other);
+        ChangeTheme = new RelayCommand(() => Theme = Theme.Next(WindowsTheme.AppsUseLight));
         Mount.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(MountController.State)) Raise(nameof(SidebarStatus));
@@ -146,13 +146,13 @@ internal sealed class MainViewModel : ObservableObject
     /// <summary>Opens the donation page, from the sidebar.</summary>
     public ICommand Donate { get; }
 
-    /// <summary>The sidebar's theme button: switches between light and dark.</summary>
+    /// <summary>The sidebar's theme button: Windows, the other look than Windows', Windows' look kept fixed, back to Windows.</summary>
     public ICommand ChangeTheme { get; }
 
-    /// <summary>The window's look (the Windows one until a click picks one): applied at once and remembered for the next start.</summary>
+    /// <summary>The window's theme (the Windows one follows Windows): applied at once and remembered for the next start.</summary>
     public ThemeChoice Theme
     {
-        get => ThemeChoice.Of(Preferences.Theme, WindowsTheme.AppsUseLight);
+        get => ThemeChoice.Of(Preferences.Theme);
         private set
         {
             if (value.Theme == Preferences.Theme) return;

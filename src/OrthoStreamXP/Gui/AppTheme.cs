@@ -3,7 +3,7 @@ using Microsoft.Win32;
 
 namespace OrthoStreamXP.Gui;
 
-/// <summary>The window's colours: the same as Windows until the person picks light or dark.</summary>
+/// <summary>The window's colours: the Windows theme (follows Windows), or always light or dark.</summary>
 internal enum AppTheme
 {
     System,
@@ -11,22 +11,31 @@ internal enum AppTheme
     Dark,
 }
 
-/// <summary>The sidebar's theme button: what it shows for the current look, and the look a click switches to.</summary>
+/// <summary>The sidebar's theme button: what it shows for a theme, and the theme a click switches to.</summary>
 internal sealed record ThemeChoice(string Label, string Glyph, AppTheme Theme)
 {
+    public static ThemeChoice Windows { get; } = new("Windows theme", "", AppTheme.System);
     public static ThemeChoice Light { get; } = new("Light theme", "", AppTheme.Light);
     public static ThemeChoice Dark { get; } = new("Dark theme", "", AppTheme.Dark);
 
-    /// <summary>The choice for a theme; the Windows one shows as the look Windows gives it.</summary>
-    public static ThemeChoice Of(AppTheme theme, Func<bool> windowsUsesLight) => theme switch
+    public static ThemeChoice Of(AppTheme theme) => theme switch
     {
         AppTheme.Light => Light,
         AppTheme.Dark => Dark,
-        _ => windowsUsesLight() ? Light : Dark,
+        _ => Windows,
     };
 
-    /// <summary>Light after dark, dark after light.</summary>
-    public ThemeChoice Other => Theme == AppTheme.Light ? Dark : Light;
+    /// <summary>
+    /// The Windows theme (follows Windows), then the other look, then Windows' look kept fixed, then the Windows theme again:
+    /// the first click always changes the colours.
+    /// </summary>
+    public ThemeChoice Next(Func<bool> windowsUsesLight)
+    {
+        ThemeChoice same = windowsUsesLight() ? Light : Dark;
+        ThemeChoice other = same == Light ? Dark : Light;
+        if (this == Windows) return other;
+        return this == other ? same : Windows;
+    }
 }
 
 internal static class AppThemeExtensions

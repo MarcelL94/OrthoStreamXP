@@ -17,20 +17,26 @@ public sealed class AppThemeTests
     }
 #pragma warning restore WPF0001
 
-    [Fact]
-    public void A_click_switches_between_light_and_dark()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Clicks_go_windows_then_the_other_look_then_the_windows_look_then_windows(bool windowsUsesLight)
     {
-        Assert.Equal(AppTheme.Dark, ThemeChoice.Light.Other.Theme);
-        Assert.Equal(AppTheme.Light, ThemeChoice.Dark.Other.Theme);
+        AppTheme same = windowsUsesLight ? AppTheme.Light : AppTheme.Dark;
+        AppTheme other = windowsUsesLight ? AppTheme.Dark : AppTheme.Light;
+        ThemeChoice choice = ThemeChoice.Of(AppTheme.System);
+        var seen = new List<AppTheme>();
+        for (int i = 0; i < 4; i++, choice = choice.Next(() => windowsUsesLight)) seen.Add(choice.Theme);
+
+        Assert.Equal([AppTheme.System, other, same, AppTheme.System], seen);
     }
 
     [Fact]
-    public void Until_a_click_the_button_shows_the_look_windows_gives()
+    public void Each_saved_theme_shows_as_its_own_choice()
     {
-        Assert.Same(ThemeChoice.Light, ThemeChoice.Of(AppTheme.System, () => true));
-        Assert.Same(ThemeChoice.Dark, ThemeChoice.Of(AppTheme.System, () => false));
-        Assert.Same(ThemeChoice.Dark, ThemeChoice.Of(AppTheme.Dark, () => true));
-        Assert.Same(ThemeChoice.Light, ThemeChoice.Of(AppTheme.Light, () => false));
+        Assert.Same(ThemeChoice.Windows, ThemeChoice.Of(AppTheme.System));
+        Assert.Same(ThemeChoice.Light, ThemeChoice.Of(AppTheme.Light));
+        Assert.Same(ThemeChoice.Dark, ThemeChoice.Of(AppTheme.Dark));
     }
 
     [Fact]
