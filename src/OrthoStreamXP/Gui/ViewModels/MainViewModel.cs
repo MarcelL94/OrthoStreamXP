@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Windows.Input;
 using OrthoStreamXP.Setup;
 
@@ -24,6 +25,10 @@ internal sealed class WindowPreferences
 
     /// <summary>Download a mesh region's roads, forests and buildings (its overlays) with it.</summary>
     public bool DownloadOverlays { get; set; } = true;
+
+    /// <summary>Light, dark, or the same as Windows.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter<AppTheme>))]
+    public AppTheme Theme { get; set; }
 
     public static WindowPreferences Load()
     {
@@ -79,6 +84,7 @@ internal sealed class MainViewModel : ObservableObject
         _selected = Navigation[0];
         HandleProblem = new RelayCommand<ProblemAction>(Handle);
         Donate = new RelayCommand(() => Shell.Open(AboutViewModel.DonationPage));
+        ChangeTheme = new RelayCommand(() => Theme = Theme.Next);
         Mount.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(MountController.State)) Raise(nameof(SidebarStatus));
@@ -139,6 +145,23 @@ internal sealed class MainViewModel : ObservableObject
 
     /// <summary>Opens the donation page, from the sidebar.</summary>
     public ICommand Donate { get; }
+
+    /// <summary>The sidebar's theme button: Windows, then Light, then Dark.</summary>
+    public ICommand ChangeTheme { get; }
+
+    /// <summary>The window's theme: applied at once and remembered for the next start.</summary>
+    public ThemeChoice Theme
+    {
+        get => ThemeChoice.Of(Preferences.Theme);
+        private set
+        {
+            if (value.Theme == Preferences.Theme) return;
+            Preferences.Theme = value.Theme;
+            Preferences.Save();
+            value.Theme.Apply();
+            Raise();
+        }
+    }
 
     public void Show(IPage page) => SelectedNav = Navigation.First(n => n.Page == page);
 

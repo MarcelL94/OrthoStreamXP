@@ -66,6 +66,16 @@
                     </StackPanel>
                 </Button>
 
+                <!-- Theme: each click goes to the next one (Windows, Light, Dark) -->
+                <Button DockPanel.Dock="Bottom" Style="{StaticResource SidebarLink}" Margin="4,0,4,0"
+                        Command="{Binding ChangeTheme}" AutomationProperties.Name="{Binding Theme.Label, StringFormat='{}{0} (click to change)'}"
+                        ToolTip="Switch the window's colours: same as Windows, light or dark.">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Icon}" Text="{Binding Theme.Glyph}" Width="20" />
+                        <TextBlock Text="{Binding Theme.Label}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
                 <ListBox ItemsSource="{Binding Navigation}" SelectedItem="{Binding SelectedNav}"
                          ItemContainerStyle="{StaticResource NavItem}" Background="Transparent" BorderThickness="0"
                          AutomationProperties.Name="Pages" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />

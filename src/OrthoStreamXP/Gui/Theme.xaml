@@ -8,6 +8,11 @@
     <gui:VisibleWhen x:Key="Visible" />
     <gui:EqualsParameter x:Key="Is" />
 
+    <!--
+      A Style set on a control replaces Fluent's implicit one, so the classic theme's black text would show through:
+      the styles below set the Foreground themselves.
+    -->
+
     <!-- Text -->
     <Style x:Key="PageTitle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="28" />
@@ -116,6 +121,7 @@
 
     <!-- A sidebar link: looks like a navigation item, but opens a web page -->
     <Style x:Key="SidebarLink" TargetType="Button">
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="Margin" Value="4,2" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
@@ -140,6 +146,7 @@
 
     <!-- A choice shown as a card (quality presets, detected folders): an accent border when chosen -->
     <Style x:Key="ChoiceCard" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource DefaultControlFocusVisualStyle}" />
         <Setter Property="Margin" Value="0,0,0,6" />
@@ -196,6 +203,7 @@
 
     <!-- An on/off setting as a Windows 11 toggle switch: its text ("On", "Off") on the left, the switch on the right -->
     <Style x:Key="Switch" TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="VerticalAlignment" Value="Center" />
