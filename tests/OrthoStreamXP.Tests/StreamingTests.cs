@@ -792,7 +792,7 @@ public sealed class StreamingTests : IDisposable
     {
         _tree.WriteText($"source/terrain/{Stem}.ter", "A\n800\nTERRAIN\n\nBASE_TEX_NOWRAP ../textures/" + Stem + ".dds\nNO_ALPHA\n");
         var roots = new SceneryRoots(_tree.PathOf("source"), _tree.PathOf("cache"), null, new TexturePlan(-3, TextureSizing.MaxSize));
-        string definition = System.Text.Encoding.UTF8.GetString(new TerrainDefinitions(roots).Resolve(VirtualPath.Of("terrain", Stem + ".ter"))!);
+        string definition = System.Text.Encoding.UTF8.GetString(new TerrainDefinitions(roots, decals: null).Resolve(VirtualPath.Of("terrain", Stem + ".ter"))!);
         Assert.Matches(@"TERRAIN\nLOAD_CENTER 51\.0\d+ 16\.8\d+ 6\d{3} 1024\n\nBASE_TEX_NOWRAP", definition);
         Assert.Contains("BASE_TEX_NOWRAP ../textures/" + Stem + ".dds", definition, StringComparison.Ordinal);
     }

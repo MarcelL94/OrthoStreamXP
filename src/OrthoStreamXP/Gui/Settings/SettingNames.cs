@@ -6,6 +6,7 @@ internal static class SettingNames
     private static readonly Dictionary<string, string> Names = new(StringComparer.Ordinal)
     {
         ["level-change"] = "Quality",
+        ["ground-detail"] = "Ground detail",
         ["xplane"] = "X-Plane folder",
         ["base-packages"] = "Scenery packages folder",
         ["source"] = "Scenery packages folder",

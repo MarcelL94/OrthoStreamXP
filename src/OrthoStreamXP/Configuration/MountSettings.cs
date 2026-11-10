@@ -40,6 +40,8 @@ internal sealed record MountSettings
     public double ProvisionalWait { get; init; }
     public string? TextureStore { get; init; }
     public bool LazyTerrainListing { get; init; }
+    /// <summary>How strong X-Plane's detail decals are on the photo terrain, 0 (left out) to 100 percent (as the packages define).</summary>
+    public int GroundDetail { get; init; }
     /// <summary>A texture-quality value from an older settings file: no longer used, noted in the log.</summary>
     public string? IgnoredTextureQuality { get; init; }
     /// <summary>Photo textures are served level by level as X-Plane reads them (off: built whole first).</summary>
@@ -137,6 +139,8 @@ internal sealed record MountSettings
             throw new SettingsException($"exposure must be between {OrthoStreamXP.Textures.Exposure.Min} and {OrthoStreamXP.Textures.Exposure.Full}");
         string readLogValue = values.String("read-log") ?? "off";
         bool readLog = ParseOnOff(readLogValue) ?? throw new SettingsException($"read-log must be on or off, not '{readLogValue}'");
+        int groundDetail = values.Int("ground-detail", 0);
+        if (groundDetail is < 0 or > Scenery.TerrainDecals.Full) throw new SettingsException("ground-detail must be between 0 and 100");
 
         if (downloadWorkers < 1) throw new SettingsException("download-workers must be at least 1");
         if (downloadTimeout is < 1 or > 120) throw new SettingsException("download-timeout must be between 1 and 120 seconds");
@@ -188,6 +192,7 @@ internal sealed record MountSettings
             ProvisionalWait = provisionalWait,
             TextureStore = textureStore,
             LazyTerrainListing = values.Flag("lazy-terrain-listing"),
+            GroundDetail = groundDetail,
             IgnoredTextureQuality = values.String("texture-quality"),
             MipStreaming = mipStreaming,
             NearWait = nearWait,

@@ -12,7 +12,11 @@ namespace OrthoStreamXP.Scenery;
 /// adjusted from the source package's file, or generated from a tile file name.
 /// Each answer is remembered for the session, so a .ter is produced once however often X-Plane opens it.
 /// </summary>
-internal sealed partial class TerrainDefinitions(SceneryRoots roots)
+/// <param name="decals">
+/// X-Plane's detail decals at the chosen strength (see <see cref="TerrainDecals"/>): the photo tiles' decal lines
+/// are faded, left out or kept. Null keeps them as the package defines.
+/// </param>
+internal sealed partial class TerrainDefinitions(SceneryRoots roots, TerrainDecals? decals)
 {
     private const string WaterOverlaySuffix = "_water_overlay.ter", SeaOverlaySuffix = "_sea_overlay.ter";
     private const string DecalLibrary = "lib/g10/decals/maquify_2_green_key.dcl";
@@ -20,6 +24,14 @@ internal sealed partial class TerrainDefinitions(SceneryRoots roots)
     private const string SeaMaskCode = "ZL";
 
     private readonly ConcurrentDictionary<string, byte[]?> _resolved = new();
+
+    /// <summary>A DECAL_LIB line with its line break; group 1 is the library path.</summary>
+    [GeneratedRegex(@"^[ \t]*DECAL_LIB[ \t]+(\S+)[^\n]*\n?", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
+    private static partial Regex DecalLibraryPattern();
+
+    /// <summary>A decal line of a .ter (DECAL_LIB, DECAL, DECAL_KEYED, DECAL_PARAMS, ...) with its line break.</summary>
+    [GeneratedRegex(@"^[ \t]*DECAL\w*\b[^\n]*\n?", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
+    private static partial Regex DecalLinePattern();
 
     [GeneratedRegex(@"^(\s*LOAD_CENTER\s+[-+\d.eE]+\s+[-+\d.eE]+\s+[-+\d.eE]+\s+)\d+(\s*(?:#.*)?)$", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
     private static partial Regex LoadCenterPattern();
@@ -77,7 +89,7 @@ internal sealed partial class TerrainDefinitions(SceneryRoots roots)
     /// <summary>
     /// The source definition with its LOAD_CENTER pixel size set to its texture's size (LOAD_CENTER_BORDER is kept).
     /// A definition without LOAD_CENTER gets one after its TERRAIN line: without it X-Plane loads the texture once,
-    /// at full size, and never reads it again as the distance changes.
+    /// at full size, and never reads it again as the distance changes. Its decals are set to the chosen strength.
     /// </summary>
     private string? Adjusted(VirtualPath path, string original)
     {
@@ -85,6 +97,9 @@ internal sealed partial class TerrainDefinitions(SceneryRoots roots)
         if (TextureOf(path.Name, out _, out _) is not { } name) return null;
         int size = roots.Textures.SizeFor(name.Zoom);
         string content = File.ReadAllText(original, Encoding.UTF8).ReplaceLineEndings("\n");
+        string withDecals = WithDecals(content);
+        bool decalsChanged = withDecals != content;
+        content = withDecals;
         int count = 0;
         string updated = LoadCenterPattern().Replace(content, m =>
         {
@@ -93,7 +108,7 @@ internal sealed partial class TerrainDefinitions(SceneryRoots roots)
         });
         if (count > 0) return updated;
         Match terrain = TerrainLinePattern().Match(content);
-        if (!terrain.Success) return null;
+        if (!terrain.Success) return decalsChanged ? content : null;
         Log.Detail($"{path.Display} has no LOAD_CENTER; one is added so X-Plane loads its texture by distance");
         return content.Insert(terrain.Index + terrain.Length, $"\nLOAD_CENTER {LoadCenter(name)} {size.ToString(CultureInfo.InvariantCulture)}");
     }
@@ -111,7 +126,7 @@ internal sealed partial class TerrainDefinitions(SceneryRoots roots)
     /// <summary>
     /// Builds a definition from its file name, in one of three forms:
     /// <list type="bullet">
-    /// <item>ROW_COL_BI16.ter: the photo texture with the standard decal library;</item>
+    /// <item>ROW_COL_BI16.ter: the photo texture with the standard decal library, at the chosen strength;</item>
     /// <item>..._water_overlay.ter: inland water blended with the shared water_transition.png;</item>
     /// <item>..._sea_overlay.ter: sea blended with the tile's own ROW_COL_ZL16.png coastline mask, which must
     /// exist in the package (masks come from coastline data and cannot be made from imagery).</item>
@@ -145,7 +160,19 @@ internal sealed partial class TerrainDefinitions(SceneryRoots roots)
         }
         if (isWaterOverlay || isSeaOverlay)
             return definition.Append("BORDER_TEX ../textures/water_transition.png\nWET\nNO_SHADOW\n").ToString();
-        return definition.Append(CultureInfo.InvariantCulture, $"DECAL_LIB {DecalLibrary}\n").Append("NO_ALPHA\n").ToString();
+        definition.Append(CultureInfo.InvariantCulture, $"DECAL_LIB {DecalLibrary}\n").Append("NO_ALPHA\n");
+        return WithDecals(definition.ToString());
+    }
+
+    /// <summary>
+    /// A photo tile's definition with its decals at the chosen strength: at 0 % every decal line is left out;
+    /// otherwise each DECAL_LIB line is kept or replaced by the library's faded decal lines.
+    /// </summary>
+    private string WithDecals(string content)
+    {
+        if (decals is null) return content;
+        if (decals.Strength <= 0) return DecalLinePattern().Replace(content, "");
+        return DecalLibraryPattern().Replace(content, m => decals.Replacement(m.Groups[1].Value) ?? m.Value);
     }
 
     /// <summary>The width of a PNG, read from its IHDR chunk, or null when the file is not a PNG.</summary>
