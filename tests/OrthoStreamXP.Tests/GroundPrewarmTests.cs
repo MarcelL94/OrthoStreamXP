@@ -158,10 +158,17 @@ public sealed class GroundPrewarmTests : IDisposable
         Assert.Equal(GroundDecision.None, away.Update(Eddf.Lat, Eddf.Lon, 0, 3, false, t0));
         Assert.Equal(GroundDecision.None, away.Update(Eddf.Lat, Eddf.Lon, 0, 3, false, t0.AddMinutes(5))); // not at this plan's departure
 
-        var airborne = new GroundWatch(Eddv.Lat, Eddv.Lon);
-        airborne.Update(Eddv.Lat, Eddv.Lon, 0, 3, false, t0);
-        airborne.Update(Eddv.Lat, Eddv.Lon, 0, 3, false, t0.AddSeconds(31));
-        Assert.Equal(GroundDecision.Stop, airborne.Update(Eddv.Lat, Eddv.Lon, 30, 120, false, t0.AddSeconds(60))); // off the ground
+        // The height is the camera's: an outside view 150 m up at the gate neither keeps it from starting nor stops it.
+        var outside = new GroundWatch(Eddv.Lat, Eddv.Lon);
+        outside.Update(Eddv.Lat, Eddv.Lon, 0, 150, false, t0);
+        Assert.Equal(GroundDecision.Start, outside.Update(Eddv.Lat, Eddv.Lon, 0, 150, false, t0.AddSeconds(31)));
+        Assert.Equal(GroundDecision.None, outside.Update(Eddv.Lat, Eddv.Lon, 0, 400, false, t0.AddSeconds(60)));
+        Assert.Equal(GroundDecision.Stop, outside.Update(Eddv.Lat, Eddv.Lon, 45, 400, false, t0.AddSeconds(90)));
+
+        // Paused in the air near the departure (no speed, 2 km up): not parked.
+        var paused = new GroundWatch(Eddv.Lat, Eddv.Lon);
+        paused.Update(Eddv.Lat, Eddv.Lon, 0, 2000, false, t0);
+        Assert.Equal(GroundDecision.None, paused.Update(Eddv.Lat, Eddv.Lon, 0, 2000, false, t0.AddMinutes(2)));
     }
 
     // ---------------------------------------------------------------- what it queues

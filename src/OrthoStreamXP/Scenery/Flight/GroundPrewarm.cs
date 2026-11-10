@@ -4,12 +4,14 @@ internal enum GroundDecision { None, Start, Stop }
 
 /// <summary>
 /// When the ground pre-warm runs: once, after the aircraft has stood still at the flight plan's departure for a while
-/// (an airliner spends 10-15 minutes there before pushback), until it rolls for takeoff or leaves the ground.
-/// Taxiing does not stop it; a position X-Plane did not send (placed from its reads) never starts it.
+/// (an airliner spends 10-15 minutes there before pushback), until it rolls for takeoff. Taxiing does not stop it; a
+/// position X-Plane did not send (placed from its reads) never starts it. The height known is the camera's, which an
+/// outside view lifts well above the aircraft: so it only keeps a paused aircraft in the air from starting it, and the
+/// stop goes by ground speed alone (no takeoff without it).
 /// </summary>
 internal sealed class GroundWatch(double departureLat, double departureLon)
 {
-    public const double ParkedKt = 3, RollingKt = 40, OnGroundM = 50, NearDepartureKm = 50;
+    public const double ParkedKt = 3, RollingKt = 40, OnGroundM = 300, NearDepartureKm = 50;
     public static readonly TimeSpan ParkedFor = TimeSpan.FromSeconds(30);
 
     private enum State { Waiting, Running, Done }
@@ -25,7 +27,7 @@ internal sealed class GroundWatch(double departureLat, double departureLon)
         switch (_state)
         {
             case State.Running:
-                if (speed <= RollingKt && heightM <= OnGroundM) return GroundDecision.None;
+                if (speed <= RollingKt) return GroundDecision.None;
                 _state = State.Done;
                 return GroundDecision.Stop;
             case State.Waiting:
