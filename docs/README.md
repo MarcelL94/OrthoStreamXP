@@ -11,13 +11,14 @@ OrthoStreamXP adds real-world aerial photos to your X-Plane 12 scenery while you
 3. [Flying](flying.md): the start order, the Home page, and the report you get after each flight.
 4. [Settings](settings.md): quality, folders, downloads, colours, seasons and exposure.
 5. [Cache](cache.md): how much disk space the scenery uses and how to free it.
-6. [Troubleshooting](troubleshooting.md): common problems, the log, updates, uninstalling and reporting a bug.
-7. [Questions and answers](faq.md): what OrthoStreamXP does and does not do, choosing the packages folder, switching from AutoOrtho.
+6. [Packages](packages.md): downloading the ground mesh of a whole region, the quickest way to get scenery packages.
+7. [Troubleshooting](troubleshooting.md): common problems, the log, updates, uninstalling and reporting a bug.
+8. [Questions and answers](faq.md): what OrthoStreamXP does and does not do, choosing the packages folder, switching from AutoOrtho.
 
 ## The short version
 
 1. Install [WinFsp](https://winfsp.dev/rel/), then OrthoStreamXP, then restart your computer.
-2. Open OrthoStreamXP and finish the setup: X-Plane folder, scenery packages folder, cache folder, quality.
+2. Open OrthoStreamXP and finish the setup: X-Plane folder, scenery packages (download a region there, or choose the folder of your own), cache folder, quality.
 3. Every time you fly, click **Start and fly** in OrthoStreamXP. It starts the scenery first and then X-Plane.
 4. Load a flight. A new area takes a few minutes the first time; after that it comes from the cache.
 

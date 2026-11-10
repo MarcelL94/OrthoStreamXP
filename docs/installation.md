@@ -6,20 +6,22 @@
 
 - **Windows 10 or 11 (64-bit).**
 - **X-Plane 12.**
-- **Scenery packages of your own** for the regions you fly. OrthoStreamXP adds the photos to them, but it does not make the terrain (the mesh) itself. Packages made by Ortho4XP, OrthoStudio XP, AutoOrtho or XPME work. Each package is a folder that contains an `Earth nav data` folder. Put all of them in **one parent folder**, for example:
+- **Scenery packages** for the regions you fly: the terrain (the mesh) that OrthoStreamXP adds the photos to. Two ways to get them:
+    1. **Download a region in OrthoStreamXP**, during the setup or later on the **Packages** page (Europe, North America...). Nothing to prepare beforehand; see [Packages](packages.md).
+    2. **Use your own.** Packages made by Ortho4XP, OrthoStudio XP, AutoOrtho or XPME work. Each package is a folder that contains an `Earth nav data` folder. Put all of them in **one parent folder**, for example:
 
-    ```
-    D:\OrthoPackages\
-        Europe\
-            Earth nav data\
-            terrain\
-            ...
-        Asia\
-            Earth nav data\
-            ...
-    ```
+        ```
+        D:\OrthoPackages\
+            Europe\
+                Earth nav data\
+                terrain\
+                ...
+            Asia\
+                Earth nav data\
+                ...
+        ```
 
-    **In this example you have to specify the "OrthoPackages" folder as a Scenery packages folder in the application. Keep in mind the "OrthoPackages" here is just for example it can be whatever folder you have. Don't put your scenery packages to the "X-Plane 12/Custom Scenery" - it has to be out of it somewhere on you PC**
+        **In this example you have to specify the "OrthoPackages" folder as a Scenery packages folder in the application. Keep in mind the "OrthoPackages" here is just for example it can be whatever folder you have. Don't put your scenery packages to the "X-Plane 12/Custom Scenery" - it has to be out of it somewhere on you PC**
 
 - **WinFsp**, a free Windows driver that OrthoStreamXP uses to show the scenery to X-Plane.
 - **An internet connection** for areas you have not flown yet.

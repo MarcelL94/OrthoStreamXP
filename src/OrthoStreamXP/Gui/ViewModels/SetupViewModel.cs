@@ -54,6 +54,8 @@ internal sealed class SetupViewModel : ObservableObject
         _main = main;
         SettingsDocument existing = SettingsDocument.Load(SettingsDocument.DefaultPath);
         _winFsp = SystemCheck.WinFspInstalled();
+        // Before the folders are chosen below: each choice tells it where regions would go.
+        Downloads = new PackagesViewModel(_main.Mount, _main.Preferences, _main.MeshHttp, _main.MeshInstalls, () => DownloadFolder, RegionInstalled);
 
         XPlaneOptions = [.. SystemCheck.FindXPlaneFolders().Select(f => new FolderOption(f, "X-Plane found here", ChooseXPlane))];
         // Which packages to use is the person's own choice: nothing is searched for, only the folder chosen before is offered.
@@ -106,6 +108,39 @@ internal sealed class SetupViewModel : ObservableObject
         {
             if (Shell.PickFolder("Choose a folder for the cache", CacheFolder) is { } folder) CacheFolder = folder;
         });
+        ShowDownloads = new RelayCommand(() =>
+        {
+            DownloadsShown = true;
+            Downloads.OnShown();
+        }, () => !DownloadsShown);
+    }
+
+    /// <summary>The regions of the mesh, for someone without scenery packages: installed into the folder chosen, or a suggested one.</summary>
+    public PackagesViewModel Downloads { get; }
+
+    public ICommand ShowDownloads { get; }
+
+    public bool DownloadsShown
+    {
+        get => _downloadsShown;
+        private set
+        {
+            if (Set(ref _downloadsShown, value)) Raise(nameof(PackagesMissing));
+        }
+    }
+
+    private bool _downloadsShown;
+
+    /// <summary>The packages folder chosen, when it can hold packages; otherwise the one the setup suggests.</summary>
+    private string DownloadFolder =>
+        _packages is not null && XPlaneOk && !SystemCheck.IsInCustomScenery(_packages, _xplane) ? _packages : SystemCheck.SuggestedPackagesFolder();
+
+    /// <summary>A region is installed: its folder becomes the packages folder, its card telling the packages now in it.</summary>
+    private void RegionInstalled(string folder)
+    {
+        FolderOption? old = PackageOptions.FirstOrDefault(o => string.Equals(o.Path, folder, StringComparison.OrdinalIgnoreCase));
+        if (old is not null) PackageOptions.Remove(old);
+        Select(PackageOptions, folder, ChoosePackages, null);
     }
 
     public ObservableCollection<FolderOption> XPlaneOptions { get; }
@@ -160,6 +195,13 @@ internal sealed class SetupViewModel : ObservableObject
     /// <summary>A folder was chosen and it has no packages (shown in red; before a choice the hint is just a hint).</summary>
     public bool PackagesWrong => _packages is not null && !PackagesOk;
 
+    /// <summary>
+    /// The folder chosen can be used but holds no packages: the download is offered right under the message, until the
+    /// list of regions is open.
+    /// </summary>
+    public bool PackagesMissing =>
+        !DownloadsShown && _packages is not null && XPlaneOk && !SystemCheck.IsInCustomScenery(_packages, _xplane) && SystemCheck.PackagesIn(_packages).Count == 0;
+
     public string PackagesHint
     {
         get
@@ -171,7 +213,9 @@ internal sealed class SetupViewModel : ObservableObject
             if (!XPlaneOk) return SystemCheck.XPlaneFirstExplanation;
             if (SystemCheck.IsInCustomScenery(_packages, _xplane)) return SystemCheck.InCustomSceneryExplanation;
             IReadOnlyList<string> found = SystemCheck.PackagesIn(_packages);
-            if (found.Count == 0) return "That folder has no scenery packages (folders with an Earth nav data folder in them).";
+            if (found.Count == 0)
+                return "That folder has no scenery packages: none of its folders has an Earth nav data folder. " +
+                       "Choose the folder that holds your packages, not a package itself. No packages yet? Download a region below.";
             IReadOnlyList<string> taken = SystemCheck.TakenInCustomScenery(_xplane, found);
             return taken.Count == 0
                 ? "OrthoStreamXP adds photos to these packages while it runs. They stay unchanged on disk."
@@ -265,7 +309,9 @@ internal sealed class SetupViewModel : ObservableObject
         Raise(nameof(PackagesOk));
         Raise(nameof(PackagesWrong));
         Raise(nameof(PackagesHint));
+        Raise(nameof(PackagesMissing));
         Raise(nameof(Summary));
+        Downloads.FolderChanged();
         RelayCommand.Refresh();
     }
 
@@ -277,7 +323,9 @@ internal sealed class SetupViewModel : ObservableObject
         Raise(nameof(PackagesOk));
         Raise(nameof(PackagesWrong));
         Raise(nameof(PackagesHint));
+        Raise(nameof(PackagesMissing));
         Raise(nameof(Summary));
+        Downloads.FolderChanged();
         RelayCommand.Refresh();
     }
 

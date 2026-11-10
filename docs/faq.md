@@ -14,7 +14,7 @@ It is free and open source, and it goes up to imagery zoom level 19 (the **Extra
 
 ### Does it make the terrain (the mesh) too?
 
-No. OrthoStreamXP only provides the photos. The mesh, the water masks and the coastlines come from scenery packages you already have, made by Ortho4XP, OrthoStudio XP, AutoOrtho or XPME. See [Installation › What you need](installation.md#what-you-need).
+No, OrthoStreamXP does not make the mesh: it provides the photos. The mesh, the water masks and the coastlines come from scenery packages. Download a whole region's mesh in OrthoStreamXP itself (see [Packages](packages.md)), or use packages you already have, made by Ortho4XP, OrthoStudio XP, AutoOrtho or XPME. See [Installation › What you need](installation.md#what-you-need).
 
 ### Why can't it use the mesh from X-Plane's default scenery?
 

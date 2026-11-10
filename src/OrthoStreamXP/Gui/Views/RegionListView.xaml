@@ -1,0 +1,96 @@
+<UserControl x:Class="OrthoStreamXP.Gui.RegionListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:ClassModifier="internal">
+    <!-- The regions of the mesh with their downloads: on the Packages page and in the setup's Scenery step (DataContext: PackagesViewModel) -->
+    <StackPanel>
+        <Border Style="{StaticResource RowCard}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                    <TextBlock Text="Roads, forests and buildings" />
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0"
+                               Text="Downloaded with each region (X-Plane's own, cut for its squares). Without them the region shows no roads, forests or buildings; turn this off if another package of yours already brings them." />
+                </StackPanel>
+                <CheckBox Grid.Column="1" Style="{StaticResource Switch}" IsChecked="{Binding DownloadOverlays}"
+                          AutomationProperties.Name="Download roads, forests and buildings with each region" />
+            </Grid>
+        </Border>
+
+        <TextBlock Text="{Binding RunningNote}" Style="{StaticResource Caption}" Margin="2,8,0,0"
+                   Visibility="{Binding RunningNote, Converter={StaticResource Visible}}" />
+        <TextBlock Text="{Binding Message}" Margin="2,8,0,0" TextWrapping="Wrap"
+                   Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                   Visibility="{Binding HasMessage, Converter={StaticResource Visible}}" />
+        <ProgressBar IsIndeterminate="True" Margin="0,12,0,0" Visibility="{Binding Loading, Converter={StaticResource Visible}}" />
+
+        <ItemsControl ItemsSource="{Binding Rows}" Focusable="False" Margin="0,8,0,0">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border Style="{StaticResource RowCard}">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                        <Border Style="{StaticResource Badge}" Visibility="{Binding UpToDate, Converter={StaticResource Visible}}">
+                                            <TextBlock Text="Installed" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Status}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                    <TextBlock Text="{Binding Details}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Content="{Binding InstallLabel}" Command="{Binding Install}" Style="{DynamicResource AccentButtonStyle}"
+                                            Visibility="{Binding ShowInstall, Converter={StaticResource Visible}}" />
+                                    <Button Content="Stop" Command="{Binding Stop}"
+                                            Visibility="{Binding Busy, Converter={StaticResource Visible}}" />
+                                    <Button Command="{Binding AskDelete}" Margin="8,0,0,0" ToolTip="Delete" AutomationProperties.Name="Delete"
+                                            Visibility="{Binding IsInstalled, Converter={StaticResource Visible}}">
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="14" />
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                            <ProgressBar Margin="0,10,0,0" Height="4" Maximum="100" Value="{Binding Percent, Mode=OneWay}"
+                                         Visibility="{Binding Busy, Converter={StaticResource Visible}}" />
+                            <TextBlock Text="{Binding Error}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                                       Visibility="{Binding HasError, Converter={StaticResource Visible}}" />
+                            <!-- Asked in place, not in a pop-up -->
+                            <Border Margin="0,12,0,0" Padding="12,10" CornerRadius="6" Background="{DynamicResource InfoBarWarningSeverityBackgroundBrush}"
+                                    Visibility="{Binding Confirming, Converter={StaticResource Visible}}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding DeleteQuestion}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="16,0,0,0">
+                                        <Button Content="Delete" Command="{Binding Delete}" Style="{DynamicResource AccentButtonStyle}" />
+                                        <Button Content="Cancel" Command="{Binding CancelDelete}" Margin="8,0,0,0" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0" Visibility="{Binding Deleting, Converter={StaticResource Visible}}">
+                                <ProgressBar IsIndeterminate="True" Width="120" VerticalAlignment="Center" />
+                                <TextBlock Text="Deleting…" Margin="10,0,0,0" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Style="{StaticResource Caption}" Margin="2,8,0,0">
+            <Run Text="The meshes are downloaded from a public collection on GitHub." />
+            <Hyperlink Command="{Binding OpenProject}">Source</Hyperlink>
+        </TextBlock>
+    </StackPanel>
+</UserControl>

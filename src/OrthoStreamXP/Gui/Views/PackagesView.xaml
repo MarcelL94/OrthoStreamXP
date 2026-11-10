@@ -1,0 +1,25 @@
+<UserControl x:Class="OrthoStreamXP.Gui.PackagesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:gui="clr-namespace:OrthoStreamXP.Gui"
+             x:ClassModifier="internal">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="36,28,36,36" MaxWidth="900">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Packages" Style="{StaticResource PageTitle}" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Open the folder" Command="{Binding OpenFolder}" />
+                    <Button Content="Refresh" Command="{Binding Refresh}" Margin="8,0,0,0" />
+                </StackPanel>
+            </Grid>
+            <TextBlock Style="{StaticResource PageIntro}"
+                       Text="No scenery packages for where you fly? Download the ground mesh of a whole region here. OrthoStreamXP then streams the photos onto it like onto your own packages." />
+            <TextBlock Style="{StaticResource Secondary}" Text="{Binding FolderText}" Margin="0,0,0,12" />
+            <gui:RegionListView />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
