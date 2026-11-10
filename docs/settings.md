@@ -17,7 +17,7 @@ At the bottom of every tab:
 
 Choose how sharp the ground is. Each preset comes with settings tested for it and keeps its own textures in the cache, so you can switch at any time without losing anything.
 
-| Preset | Textures | Imagery zoom | Ground detail | Best for |
+| Preset | Textures | Imagery zoom | Resolution | Best for |
 |---|---|---|---|---|
 | **Balanced** | 1024 px | 15, 16 near airports | ~6.8 m per pixel | High flying, a slower connection or little graphics memory |
 | **Sharp** | 2048 px | 16, 17 near airports | ~3.4 m per pixel | Everyday flying, approaches included |
@@ -30,6 +30,18 @@ Each card shows the imagery zoom, the metres per pixel, roughly how long a new a
 
 - The **Recommended** badge marks the preset that suits your connection and graphics card, with the reason below it.
 - If a preset's photo textures plus X-Plane's own needs (about 5 GB) would be more than your graphics card has, its card shows a warning. X-Plane may then stutter or lower its texture detail; a smaller preset is safer.
+
+### Ground detail
+
+Up close, X-Plane can sprinkle its own procedural grass, shrubs and dirt over the ground. This helps X-Plane's blurry default textures, but on sharp aerial photos it looks like noise: dark speckles and pale stony patches that the real imagery does not have. The photo scenery packages ask for it in every photo tile, so you see it with any scenery packages.
+
+The **Ground detail** slider sets how strong this effect is:
+
+- **Off** (0 %, the default): the photos are shown as they are.
+- **10–90 %**: a lighter version of X-Plane's effect, for some extra texture when you are low.
+- **100 %**: X-Plane's full effect, as the packages define it.
+
+Your scenery packages are not changed: OrthoStreamXP adjusts the terrain files as X-Plane reads them. The in-between strengths are made from X-Plane's own decal files, so they need the **X-Plane folder** to be set. Like every setting, a change applies from the next start.
 
 ## Folders
 

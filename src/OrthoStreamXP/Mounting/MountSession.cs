@@ -131,13 +131,21 @@ internal sealed class MountSession : IDisposable
         if (s.TextureStore is not null) Log.Info($"Lazy local DDS store: {s.TextureStore}");
         if (s.LazyTerrainListing)
             Log.Info("Terrain directory listing is lazy; DSF-referenced definitions remain available by direct path");
+        // X-Plane's own folder holds the decal libraries; with a plain mountpoint there is none.
+        var decals = new TerrainDecals(Path.GetDirectoryName(s.CustomScenery), s.GroundDetail);
+        Log.Info(s.GroundDetail switch
+        {
+            0 => "Ground detail: 0 %; X-Plane's grass and dirt decals are left out of the photo terrain (the packages are not changed)",
+            TerrainDecals.Full => "Ground detail: 100 %; X-Plane draws its grass and dirt decals over the photos as the packages define",
+            _ => $"Ground detail: {s.GroundDetail} %; X-Plane's grass and dirt decals are faded over the photos (the packages are not changed)",
+        });
 
         foreach (PackagePlan package in s.Packages)
         {
             var roots = new SceneryRoots(package.Source, package.Cache, s.TextureStore, s.Textures);
             TerrainDefinitions.RemoveCachedCopies(package.Cache);
             roots.RenameToCacheNames();
-            _mounts.Add(new PackageMount(package, roots, builder, textureOptions, s.TrackAircraft, s.LoadAhead, s.LazyTerrainListing,
+            _mounts.Add(new PackageMount(package, roots, builder, textureOptions, s.TrackAircraft, s.LoadAhead, s.LazyTerrainListing, decals,
                 streaming ? new TextureStreamer(roots, builder!, _view, model, streamingOptions) : null, _view, _readLog, _seasons, _usage, _colours, _loads, exposure));
             Log.Info($"Package {package.Name}: read-only from {package.Source}, cache overlay {package.Cache}, mounted at {package.Mountpoint}");
         }

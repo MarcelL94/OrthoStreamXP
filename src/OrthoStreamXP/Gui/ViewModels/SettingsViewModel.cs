@@ -289,6 +289,24 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
 
     public string ExposureText => $"{Exposure:0} %";
 
+    /// <summary>How strong X-Plane's grass and dirt decals are over the photos, in percent, for the slider.</summary>
+    public double GroundDetail
+    {
+        get => _document.GetDouble("ground-detail") ?? 0;
+        set
+        {
+            Save("ground-detail", Math.Clamp((int)Math.Round(value), 0, Scenery.TerrainDecals.Full).ToString(CultureInfo.InvariantCulture));
+            Raise();
+            Raise(nameof(GroundDetailText));
+        }
+    }
+
+    public string GroundDetailText => GroundDetail switch
+    {
+        <= 0 => "Off",
+        _ => $"{GroundDetail:0} %",
+    };
+
     public string XPlaneFolder
     {
         get => _xplane;
@@ -464,6 +482,7 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
                  {
                      nameof(Provider), nameof(DownloadWorkers), nameof(DownloadWorkersText), nameof(FilePath), nameof(CacheEstimate),
                      nameof(MatchColoursOn), nameof(MatchColoursOnText), nameof(MatchStrength), nameof(MatchStrengthText), nameof(SeasonsOn), nameof(SeasonsOnText), nameof(Season), nameof(SeasonStrength), nameof(SeasonStrengthText), nameof(Exposure), nameof(ExposureText),
+                     nameof(GroundDetail), nameof(GroundDetailText),
                      nameof(TunedRows), nameof(TuningText), nameof(CanReset), nameof(ResetQuestion),
                  })
             Raise(name);

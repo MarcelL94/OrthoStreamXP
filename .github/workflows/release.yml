@@ -1,5 +1,7 @@
 # A version tag (v0.1.0): test, build the installer with that version, and publish it as a GitHub Release.
 # 0.x versions and versions with a suffix (v1.0.0-rc1) are marked as pre-releases.
+# The release text is release-notes/<tag>.md (release-notes/v1.2.0.md), followed by GitHub's generated list of changes.
+# A release needs its notes file; a pre-release without one gets the generated list only.
 name: Release
 
 on:
@@ -14,6 +16,25 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Checked first, so a missing notes file fails the run in seconds rather than after the build.
+      - name: Find the release notes
+        id: notes
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $version = $tag.TrimStart('v')
+          $prerelease = $version.StartsWith('0.') -or $version.Contains('-')
+          $file = "release-notes/$tag.md"
+          if (Test-Path $file) {
+            if (-not (Get-Content $file -Raw).Trim()) { throw "$file is empty: write the release notes, then tag again" }
+            "file=$file" >> $env:GITHUB_OUTPUT
+          } elseif ($prerelease) {
+            Write-Host "::notice::No $file; the pre-release gets GitHub's generated notes only"
+          } else {
+            throw "No release notes for $tag. Add $file (see release-notes/README.md), then tag again."
+          }
+          "prerelease=$($prerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -53,8 +74,12 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          NOTES_FILE: ${{ steps.notes.outputs.file }}
+          PRERELEASE: ${{ steps.notes.outputs.prerelease }}
         run: |
           $version = '${{ github.ref_name }}'.TrimStart('v')
+          # With --generate-notes, the notes file comes first and GitHub's list of changes is added after it.
           $flags = @('--title', "OrthoStreamXP $version", '--generate-notes')
-          if ($version.StartsWith('0.') -or $version.Contains('-')) { $flags += '--prerelease' }
+          if ($env:NOTES_FILE) { $flags += @('--notes-file', $env:NOTES_FILE) }
+          if ($env:PRERELEASE -eq 'true') { $flags += '--prerelease' }
           gh release create '${{ github.ref_name }}' (Get-ChildItem artifacts\releases -File).FullName @flags

@@ -22,6 +22,7 @@ When something goes wrong, Home shows a notice that says what happened, usually 
 | **Blurry ground for a while** | A new area takes a few minutes the first time. If it happens often, try a lower preset or apply the tuning suggestions after your flight (see [Flying](flying.md#tuning-suggestions)). |
 | **Patchy colours between photos** | Turn on **Even out the colours between photos** in [Settings › Colours](settings.md#colours). |
 | **Photos look too bright next to X-Plane's own scenery** | Lower **Exposure** in [Settings › Colours](settings.md#exposure). |
+| **Noisy, speckled ground up close** | X-Plane's grass and dirt detail is drawn over the photos. Set **Ground detail** to **Off** (or lower it) in [Settings › Quality](settings.md#ground-detail). |
 
 ## The Log page
 

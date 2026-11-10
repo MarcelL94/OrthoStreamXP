@@ -18,6 +18,7 @@ internal sealed class SceneryOverlay
 
     private readonly SceneryRoots _roots;
     private readonly TerrainDefinitions _terrain;
+    private readonly TerrainDecals? _decals;
     private readonly TextureScheduler? _textures;
     private readonly TextureStreamer? _streamer;
     private readonly TextureCatalog? _catalog;
@@ -29,11 +30,13 @@ internal sealed class SceneryOverlay
 
     /// <param name="catalog">Learns the loaded scenery's textures from the terrain definitions X-Plane opens (for prefetch).</param>
     /// <param name="streamer">Serves photo textures level by level instead of building them whole (then <paramref name="textures"/> is null).</param>
+    /// <param name="decals">X-Plane's detail decals at the chosen strength; null keeps them as the package defines.</param>
     public SceneryOverlay(SceneryRoots roots, TextureScheduler? textures, bool lazyTerrainListing, TextureCatalog? catalog = null,
-        TextureStreamer? streamer = null)
+        TextureStreamer? streamer = null, TerrainDecals? decals = null)
     {
         _roots = roots;
-        _terrain = new TerrainDefinitions(roots);
+        _decals = decals;
+        _terrain = new TerrainDefinitions(roots, decals);
         _textures = textures;
         _streamer = streamer;
         _catalog = catalog;
@@ -57,6 +60,8 @@ internal sealed class SceneryOverlay
     /// </summary>
     public OverlayEntry Open(VirtualPath path)
     {
+        // The faded decal textures the photo terrain definitions point at.
+        if (_decals?.Texture(path) is { } decal) return new OverlayEntry(null, null, decal);
         if (_terrain.Resolve(path) is { } definition)
         {
             LogRequest(path);

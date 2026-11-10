@@ -20,6 +20,7 @@ dotnet test --solution OrthoStreamXP.slnx --filter-method "*Name*"   # single te
 - `TreatWarningsAsErrors` and `AnalysisMode=Recommended` are on (`Directory.Build.props`): warnings fail the build.
 - `MountSmokeTests` performs a real WinFsp mount with synthetic imagery; it is skipped locally if WinFsp is missing, but always runs when the `CI` env var is set. CI (`.github/workflows/ci.yml`) runs on Windows and installs WinFsp.
 - Tests use `FakeTileServer` / `TempTree` helpers instead of the network.
+- Releases: pushing a `v*` tag runs `.github/workflows/release.yml`, which needs `release-notes/<tag>.md` (pre-releases may skip it) and puts it above GitHub's generated notes. See `release-notes/README.md`.
 
 ## Branching
 
