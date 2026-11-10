@@ -68,10 +68,15 @@ internal sealed record MountSettings
     public bool ReadLog { get; init; }
     /// <summary>Every texture and terrain file X-Plane asks for, and every build, in the log too (for a bug hunt).</summary>
     public bool LogDetail { get; init; }
+    /// <summary>SimBrief username or Pilot ID: the latest flight plan's departure is prefetched (null: off).</summary>
+    public string? SimBriefUser { get; init; }
+    /// <summary>How far around the SimBrief departure textures are prefetched.</summary>
+    public double SimBriefRadiusKm { get; init; } = DefaultSimBriefRadiusKm;
 
     public const int DefaultFileSystemThreads = 64;
     public const double DefaultNearWait = 60, DefaultMaxWait = 6, DefaultLookaheadSeconds = 120;
     public const int DefaultBuildMemoryMb = 512;
+    public const double DefaultSimBriefRadiusKm = 10;
 
     /// <summary>Reads and checks the mount options; a mistake is a <see cref="SettingsException"/> in plain words.</summary>
     /// <param name="console">False for the window: the log never goes to a console there.</param>
@@ -141,6 +146,9 @@ internal sealed record MountSettings
         bool readLog = ParseOnOff(readLogValue) ?? throw new SettingsException($"read-log must be on or off, not '{readLogValue}'");
         int groundDetail = values.Int("ground-detail", 0);
         if (groundDetail is < 0 or > Scenery.TerrainDecals.Full) throw new SettingsException("ground-detail must be between 0 and 100");
+        string? simBriefUser = values.String("simbrief-user")?.Trim() is { Length: > 0 } user ? user : null;
+        double simBriefRadiusKm = values.Double("simbrief-radius-km", DefaultSimBriefRadiusKm);
+        if (simBriefRadiusKm is < 1 or > 50) throw new SettingsException("simbrief-radius-km must be between 1 and 50");
 
         if (downloadWorkers < 1) throw new SettingsException("download-workers must be at least 1");
         if (downloadTimeout is < 1 or > 120) throw new SettingsException("download-timeout must be between 1 and 120 seconds");
@@ -207,6 +215,8 @@ internal sealed record MountSettings
             CacheLimitBytes = (long)(cacheLimitGb * (1L << 30)),
             ReadLog = readLog,
             LogDetail = logDetail,
+            SimBriefUser = simBriefUser,
+            SimBriefRadiusKm = simBriefRadiusKm,
         };
     }
 

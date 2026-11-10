@@ -63,6 +63,12 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
             Field("xplane-arguments", "X-Plane start options",
                 "Added when OrthoStreamXP starts X-Plane (Start and fly), such as --allow_reshade. Takes effect the next time X-Plane is started.",
                 FieldKind.Text, placeholder: "--allow_reshade"),
+            Field("simbrief-user", "SimBrief username",
+                "Your SimBrief username or Pilot ID. When streaming starts, the photos around the departure airport of your latest flight plan are built before X-Plane loads them; those already in the cache are skipped. Leave it empty to turn this off.",
+                FieldKind.Text, placeholder: "username or Pilot ID"),
+            Field("simbrief-radius-km", "SimBrief departure area (km)",
+                "How far around the departure airport the photos are built ahead. More takes longer and fills more of the cache.",
+                FieldKind.Number, min: 1, max: 50),
         ];
         ConnectionTest = new ConnectionTestViewModel(
             () => _document.Get("texture-provider") ?? "bing,esri",
@@ -546,6 +552,7 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
     private static string Default(string key) => key switch
     {
         "scenery-packs" => "on",
+        "simbrief-radius-km" => MountSettings.DefaultSimBriefRadiusKm.ToString(System.Globalization.CultureInfo.InvariantCulture),
         _ => "",
     };
 }

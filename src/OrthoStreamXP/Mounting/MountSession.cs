@@ -28,7 +28,8 @@ internal sealed class MountSession : IDisposable
     private ReadLog? _readLog;
     private SeasonClock? _seasons;
     private ColourMatcher? _colours;
-    private Task? _summaryLoop, _sampleLoop;
+    private Task? _summaryLoop, _sampleLoop, _departure;
+    private HttpClient? _simBrief;
     private bool _stopped;
 
     private MountSession(MountSettings settings)
@@ -183,8 +184,53 @@ internal sealed class MountSession : IDisposable
             mount.Warmer?.Start();
         }
         _listener?.Start();
+        StartDeparturePrefetch();
         _summaryLoop = LogSummariesAsync(_summaries.Token);
         _sampleLoop = SampleAsync(_summaries.Token);
+    }
+
+    /// <summary>
+    /// With a SimBrief user set: builds the textures around the latest flight plan's departure airport while X-Plane
+    /// is still starting, skipping the ones in the cache. Runs in the background; a failure is only logged.
+    /// </summary>
+    private void StartDeparturePrefetch()
+    {
+        if (_settings.SimBriefUser is not { } user) return;
+        DepartureTarget[] targets = [.. _mounts
+            .Select(m => (Mount: m, Prefetch: m.Warmer is { } warmer ? warmer.Prefetch : m.Scheduler is { } scheduler ? scheduler.Prefetch : (Func<IReadOnlyList<VirtualPath>, int>?)null))
+            .Where(m => m.Prefetch is not null)
+            .Select(m => new DepartureTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, path => m.Mount.Roots.CachedFile(path) is not null, m.Prefetch!))];
+        if (targets.Length == 0)
+        {
+            Log.Info("SimBrief: departure prefetch needs an imagery provider and load-ahead (or aircraft tracking); it is off for this run");
+            return;
+        }
+        _simBrief = new HttpClient();
+        _simBrief.DefaultRequestHeaders.UserAgent.ParseAdd("orthostreamxp");
+        var client = new SimBriefClient(_simBrief);
+        AircraftPositionListener? listener = _listener;
+        var prefetch = new DeparturePrefetch(ct => client.LatestOriginAsync(user, ct),
+            () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, targets, _settings.SimBriefRadiusKm);
+        CancellationToken stop = _summaries.Token;
+        _departure = Task.Run(async () =>
+        {
+            try
+            {
+                await prefetch.RunAsync(stop).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested)
+            {
+                // Stopped before the flight plan arrived.
+            }
+            catch (IOException ex)
+            {
+                Log.Warning($"SimBrief: departure prefetch failed ({ex.Message})");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Log.Warning($"SimBrief: departure prefetch failed ({ex.Message})");
+            }
+        }, stop);
     }
 
     /// <summary>The live numbers of every package together.</summary>
@@ -255,7 +301,7 @@ internal sealed class MountSession : IDisposable
             else
                 await finished.ConfigureAwait(false);
         }
-        foreach (Task? loop in new[] { _summaryLoop, _sampleLoop })
+        foreach (Task? loop in new[] { _summaryLoop, _sampleLoop, _departure })
         {
             if (loop is null) continue;
             try
@@ -270,6 +316,7 @@ internal sealed class MountSession : IDisposable
         _listener?.Dispose();
         foreach (PackageMount mount in _mounts) mount.Dispose();
         _tiles?.Dispose();
+        _simBrief?.Dispose();
         _readLog?.Dispose();
         _summaries.Dispose();
         // Every file is closed now: the cache can be kept within its limit.

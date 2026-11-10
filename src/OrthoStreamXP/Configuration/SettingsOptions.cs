@@ -39,6 +39,8 @@ internal static class SettingsOptions
         .Add("prefetch-radius-km", "Width either side of the predicted path, and the radius around a slow or stationary aircraft (default: 5 km)")
         .Add("prefetch-lookahead-seconds", $"How far ahead to prefetch, as flying time at the current ground speed: 120 s is 7.4 km at 120 kt, 28 km at 450 kt (default: {MountSettings.DefaultLookaheadSeconds})")
         .Add("prefetch-textures", "Maximum DDS files to queue per position update, nearest along the path first (default: 8)")
+        .Add("simbrief-user", "SimBrief username (or the numeric Pilot ID): as the mount starts, the textures around the departure airport of your latest SimBrief flight plan are built before X-Plane asks for them; the ones in the cache already are skipped (default: none, off)")
+        .Add("simbrief-radius-km", $"How far around the SimBrief departure airport textures are built ahead, 1-50 km (default: {MountSettings.DefaultSimBriefRadiusKm})")
         .Add("level-change", "Fetch tiles at (zoom in the .ter/DDS file name + N), -4..2. -1 downloads a quarter of the tiles of 0; +1 four times as many (default: 0). Each level keeps its textures in its own cache subfolder. It also sets the texture size: 4096 px at level 0 and above, half per level below (-2: 1024, -1: 2048, 0 and +1: 4096)")
         .Add("provisional-lod", "Cold-run speedup: if the full DDS is not ready within provisional-wait seconds, serve a same-size image built from tiles N zoom levels coarser (N=2 downloads 16 tiles instead of 256). 0 disables. Needs background-textures or track-aircraft (default: 2)")
         .Add("provisional-wait", "Seconds to wait for the full-detail DDS before serving the provisional one (default: 2.0)")

@@ -22,6 +22,8 @@ internal static class SettingNames
         ["scenery-packs"] = "Keep the photo scenery below airports",
         ["xplane-address"] = "X-Plane address",
         ["xplane-arguments"] = "X-Plane start options",
+        ["simbrief-user"] = "SimBrief departure prefetch",
+        ["simbrief-radius-km"] = "SimBrief departure prefetch",
     };
 
     /// <summary>Settings the running streaming does not use: changing them never needs a restart.</summary>
