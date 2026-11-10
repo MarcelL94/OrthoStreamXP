@@ -104,9 +104,16 @@ internal sealed class MipWarmer : IDisposable
         Wake();
     }
 
-    /// <summary>The flight-path prefetch: whole textures along the predicted path. Returns how many were queued.</summary>
+    /// <summary>
+    /// The flight-path and SimBrief departure prefetch: whole textures ahead of X-Plane. Returns how many were queued.
+    /// A texture with nothing yet gets its base tile first, as load-ahead gives every texture: once it is whole,
+    /// load-ahead skips it, and the low-zoom base there (far scenery, colour matching, the report's map) would stay empty.
+    /// </summary>
     public int Prefetch(IReadOnlyList<VirtualPath> textures)
     {
+        foreach (VirtualPath texture in textures)
+            if (_streamer.Get(texture) is { } t && _streamer.RealFrom(t) > t.BaseMip)
+                _streamer.Warm(texture, t.BaseMip, FetchPriority.Warm);
         lock (_gate)
             foreach (VirtualPath texture in textures)
                 _waiting[texture.Key] = new Request(texture, 0, FetchPriority.Warm);

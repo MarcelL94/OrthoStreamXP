@@ -474,6 +474,22 @@ public sealed class StreamingTests : IDisposable
     }
 
     [Fact]
+    public async Task A_whole_texture_prefetched_ahead_of_XPlane_gets_its_base_tile_too()
+    {
+        // The SimBrief departure: fetched whole before X-Plane loads it, then skipped by load-ahead as complete. Without
+        // its base tile the low-zoom base (far scenery, colour matching, the report's map) would stay empty there.
+        Setup s = Streaming();
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+        StreamedTexture t = s.Streamer.Get(Texture())!;
+
+        warmer.Prefetch([Texture()]);
+        warmer.StartWhatFits();
+        await Until(() => s.Streamer.RealFrom(t) == 0 && s.Builder.StoreHasRegion(t.Name, t.ZoomFor(t.BaseMip)));
+        Assert.Equal(1, Zooms(s.Server).Count(z => z == 12));
+        Assert.Equal(16, Zooms(s.Server).Count(z => z == 14));
+    }
+
+    [Fact]
     public async Task With_the_camera_beside_a_texture_load_ahead_fetches_it_in_full_and_the_far_one_as_a_base_tile()
     {
         Setup s = Streaming();
