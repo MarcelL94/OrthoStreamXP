@@ -135,7 +135,7 @@ internal sealed class MipWarmer : IDisposable
             if (_streamer.Get(texture) is not { } t) continue;
             double distance = Geo.DistanceM(lat, lon, t.Lat, t.Lon);
             int wanted = _streamer.Model.MipFor(distance, t.SizeM, t.Layout.Size);
-            int mip = Math.Min(wanted, t.BaseMip);
+            int mip = Math.Min(wanted, Coarsest(t));
             int real = _streamer.RealFrom(t);
             if (real <= mip)
             {
@@ -143,7 +143,7 @@ internal sealed class MipWarmer : IDisposable
                 continue;
             }
             // Far ones are only their base tile: before the middle levels, as X-Plane reads far scenery first.
-            int priority = mip >= t.BaseMip ? FetchPriority.Warm : PriorityOf(t, wanted);
+            int priority = mip >= Coarsest(t) ? FetchPriority.Warm : PriorityOf(t, wanted);
             requests.Add(new Request(texture, mip, priority, Distance: distance));
         }
         lock (_gate)
@@ -152,6 +152,13 @@ internal sealed class MipWarmer : IDisposable
         Wake();
         return (requests.Count, had);
     }
+
+    /// <summary>
+    /// The coarsest level worth fetching ahead: the base tile, or the finer level X-Plane's smallest read takes anyway
+    /// when that is finer (ZL18 textures: level 4, not their base level 6). Fetching only the base tile there made every
+    /// such texture wait while X-Plane loaded it (926 of 3,554 at EDDV).
+    /// </summary>
+    private static int Coarsest(StreamedTexture t) => Math.Min(t.BaseMip, ReadPattern.CoarsestRead(t.Layout));
 
     /// <summary>A load-ahead build's priority by the band X-Plane will read the texture in.</summary>
     private static int PriorityOf(StreamedTexture t, int wanted) => TextureStreamer.BandOf(t, wanted) switch
@@ -185,7 +192,7 @@ internal sealed class MipWarmer : IDisposable
             return (t, t.BaseMip, Math.Min(priority ?? FetchPriority.Warm, FetchPriority.Warm),
                 _view.Current is { } at ? ViewTracker.DistanceM(at, t.Lat, t.Lon) : departureDistance ?? double.MaxValue);
         if (_view.Current is not { } camera)
-            return (t, mip ?? t.BaseMip, priority ?? FetchPriority.Background, departureDistance ?? double.MaxValue);
+            return (t, mip ?? Coarsest(t), priority ?? FetchPriority.Background, departureDistance ?? double.MaxValue);
         double distance = ViewTracker.DistanceM(camera, t.Lat, t.Lon);
         if (mip is int fixedMip) return (t, fixedMip, priority ?? FetchPriority.Warm, distance);
 
@@ -197,7 +204,7 @@ internal sealed class MipWarmer : IDisposable
             soon = Math.Max(0, distance - Math.Max(0, closing) * LeadSeconds);
         }
         int wanted = _streamer.Model.MipFor(soon, t.SizeM, t.Layout.Size);
-        int target = Math.Min(wanted, t.BaseMip);
+        int target = Math.Min(wanted, Coarsest(t));
         return (t, target, PriorityOf(t, wanted), distance);
     }
 

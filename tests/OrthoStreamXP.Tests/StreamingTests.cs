@@ -533,6 +533,36 @@ public sealed class StreamingTests : IDisposable
     }
 
     [Fact]
+    public void XPlanes_smallest_read_takes_level_4_of_a_4096_px_texture()
+    {
+        // Its last 64 KB chunk starts inside level 3 (levels 4 and smaller are 43 KB): X-Plane is after level 4 at least.
+        Assert.Equal(4, ReadPattern.CoarsestRead(DdsLayout.For(4096)));
+        // 2048 px: it starts inside level 2, so level 3 (256 px again).
+        Assert.Equal(3, ReadPattern.CoarsestRead(DdsLayout.For(2048)));
+        // 1024 px: the last chunk starts inside level 1.
+        Assert.Equal(2, ReadPattern.CoarsestRead(DdsLayout.For(1024)));
+    }
+
+    [Fact]
+    public async Task Before_a_position_a_ZL18_texture_gets_the_level_XPlane_reads_at_least_not_just_its_base_tile()
+    {
+        // At EDDV 926 ZL18 textures waited while X-Plane loaded them: their base tile is level 6, X-Plane takes level 4.
+        Setup s = Streaming(level: 0);
+        var catalog = new TextureCatalog();
+        using var warmer = new MipWarmer(catalog, s.Streamer, s.View, heavy: 2);
+        catalog.AddTerrain(VirtualPath.Of("terrain", "90384_137776_BI18.ter"));
+        StreamedTexture t = s.Streamer.Get(Texture("90384_137776_BI18"))!;
+
+        await Until(() =>
+        {
+            warmer.StartWhatFits();
+            return s.Streamer.RealFrom(t) <= 4;
+        });
+        Assert.Equal(6, t.BaseMip);
+        Assert.Equal([14], Zooms(s.Server).Distinct()); // level 4 is one tile at zoom 14
+    }
+
+    [Fact]
     public void Load_ahead_sorts_a_build_by_its_tiles_with_base_tiles_apart()
     {
         const MipWarmer.BuildKind Base = MipWarmer.BuildKind.Base, Small = MipWarmer.BuildKind.Small, Heavy = MipWarmer.BuildKind.Heavy;
