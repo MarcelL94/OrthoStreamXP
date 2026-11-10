@@ -66,9 +66,6 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
             Field("simbrief-user", "SimBrief username",
                 "Your SimBrief username or Pilot ID. When streaming starts, the photos around the departure airport of your latest flight plan are built before X-Plane loads them; those already in the cache are skipped. Leave it empty to turn this off.",
                 FieldKind.Text, placeholder: "username or Pilot ID"),
-            Field("simbrief-radius-km", "SimBrief departure area (km)",
-                "Only with mip streaming off: how far around the departure airport the photos are built ahead at full detail. With streaming on, the whole area X-Plane loads is built, each photo as sharp as X-Plane will want it.",
-                FieldKind.Number, min: 1, max: 50),
         ];
         ConnectionTest = new ConnectionTestViewModel(
             () => _document.Get("texture-provider") ?? "bing,esri",
@@ -552,7 +549,6 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
     private static string Default(string key) => key switch
     {
         "scenery-packs" => "on",
-        "simbrief-radius-km" => MountSettings.DefaultSimBriefRadiusKm.ToString(System.Globalization.CultureInfo.InvariantCulture),
         _ => "",
     };
 }
