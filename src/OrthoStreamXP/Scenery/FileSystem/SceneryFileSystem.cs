@@ -288,6 +288,8 @@ internal sealed class SceneryFileSystem(SceneryOverlay overlay, string label, Re
             answer.Band?.ToString().ToLowerInvariant(), answer.Served?.ToString().ToLowerInvariant(), answer.WaitMs, answer.DistanceM,
             texture.SizeM, texture.Layout.Size, answer.Wanted));
 
+    private int _rootListed;
+
     public override bool ReadDirectoryEntry(object fileNode, object fileDesc, string pattern, string marker,
         ref object context, out string fileName, out FspFileInfo fileInfo)
     {
@@ -296,6 +298,8 @@ internal sealed class SceneryFileSystem(SceneryOverlay overlay, string label, Re
         {
             var self = new DirectoryInfo(handle.Backing);
             IEnumerable<FileSystemInfo> children = overlay.List(handle.Path);
+            if (handle.Path.IsRoot && Interlocked.Exchange(ref _rootListed, 1) == 0)
+                Log.Info($"{package}: the package folder was listed for the first time (by X-Plane or another program)");
             // "." and ".." are named by index below; the infos are only used for their attributes and times.
             handle.Entries = handle.Path.IsRoot ? [.. children] : [self, self, .. children];
         }
