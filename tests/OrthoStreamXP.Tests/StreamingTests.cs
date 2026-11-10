@@ -474,6 +474,24 @@ public sealed class StreamingTests : IDisposable
     }
 
     [Fact]
+    public async Task The_departure_area_is_fetched_as_XPlane_will_want_it_from_the_gate()
+    {
+        // Before X-Plane sends a position: the texture at the departure in full (its base tile first), the far one as a base tile.
+        Setup s = Streaming();
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+        StreamedTexture near = s.Streamer.Get(Texture())!, far = s.Streamer.Get(Texture("21904_36144_BI16"))!; // 20 textures east
+
+        var (queued, had) = warmer.PrefetchAround([Texture(), Texture("21904_36144_BI16")], near.Lat, near.Lon);
+        warmer.StartWhatFits();
+        await Until(() => s.Streamer.RealFrom(near) == 0 && s.Streamer.RealFrom(far) <= far.BaseMip);
+
+        Assert.Equal((2, 0), (queued, had));
+        Assert.Equal(16, Zooms(s.Server).Count(z => z == 14)); // only the near one in full
+        Assert.Equal(2, Zooms(s.Server).Count(z => z == 12)); // a base tile each
+        Assert.Equal((0, 2), warmer.PrefetchAround([Texture(), Texture("21904_36144_BI16")], near.Lat, near.Lon)); // the next start: nothing to do
+    }
+
+    [Fact]
     public async Task A_whole_texture_prefetched_ahead_of_XPlane_gets_its_base_tile_too()
     {
         // The SimBrief departure: fetched whole before X-Plane loads it, then skipped by load-ahead as complete. Without

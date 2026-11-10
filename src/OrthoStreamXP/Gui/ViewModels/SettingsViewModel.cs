@@ -67,7 +67,7 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
                 "Your SimBrief username or Pilot ID. When streaming starts, the photos around the departure airport of your latest flight plan are built before X-Plane loads them; those already in the cache are skipped. Leave it empty to turn this off.",
                 FieldKind.Text, placeholder: "username or Pilot ID"),
             Field("simbrief-radius-km", "SimBrief departure area (km)",
-                "How far around the departure airport the photos are built ahead. More takes longer and fills more of the cache.",
+                "Only with mip streaming off: how far around the departure airport the photos are built ahead at full detail. With streaming on, the whole area X-Plane loads is built, each photo as sharp as X-Plane will want it.",
                 FieldKind.Number, min: 1, max: 50),
         ];
         ConnectionTest = new ConnectionTestViewModel(

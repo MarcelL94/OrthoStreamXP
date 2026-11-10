@@ -3,12 +3,19 @@ namespace OrthoStreamXP.Scenery;
 /// <summary>A mounted package as the departure prefetch sees it: where its terrain definitions are, what its cache has, and its build queue.</summary>
 /// <param name="IsCached">True when the full-detail texture is in the cache already (nothing to fetch).</param>
 /// <param name="Prefetch">Queues whole textures ahead of X-Plane (the load-ahead's or the build scheduler's queue).</param>
-internal sealed record DepartureTarget(string Name, string Source, Func<VirtualPath, bool> IsCached, Func<IReadOnlyList<VirtualPath>, int> Prefetch);
+/// <param name="PrefetchArea">
+/// With mip streaming: queues every texture of the scenery around the departure, each to the level X-Plane will want
+/// from there (<see cref="MipWarmer.PrefetchAround"/>); null when textures are built whole only.
+/// </param>
+internal sealed record DepartureTarget(string Name, string Source, Func<VirtualPath, bool> IsCached, Func<IReadOnlyList<VirtualPath>, int> Prefetch,
+    Func<IReadOnlyList<VirtualPath>, double, double, (int Queued, int Had)>? PrefetchArea = null);
 
 /// <summary>
-/// Builds the textures around the departure airport of the latest SimBrief flight plan as the mount starts, before
-/// X-Plane loads the scenery there: X-Plane's first load at the gate then finds them in the cache. Textures the cache
-/// has already are left alone; X-Plane's own reads still come first in the download queue.
+/// Builds the scenery around the departure airport of the latest SimBrief flight plan as the mount starts, before
+/// X-Plane loads it: X-Plane's first load at the gate then finds it in the cache. With mip streaming that is every
+/// texture of the DSF tiles X-Plane loads there (<see cref="DepartureArea"/>), each to the level X-Plane will want;
+/// otherwise (or when the package's DSFs cannot be read) the textures within <c>radiusKm</c> at full detail. What
+/// the cache has already is left alone; X-Plane's own reads still come first in the download queue.
 /// </summary>
 /// <param name="origin">The flight plan's departure airport, or null when there is none.</param>
 /// <param name="aircraft">Where the aircraft is now, when X-Plane has sent a position.</param>
@@ -35,6 +42,19 @@ internal sealed class DeparturePrefetch(Func<CancellationToken, Task<FlightOrigi
         foreach (DepartureTarget target in targets)
         {
             ct.ThrowIfCancellationRequested();
+            if (target.PrefetchArea is { } prefetchArea)
+            {
+                IReadOnlyList<VirtualPath> area = DepartureArea.Textures(target.Source, from.Lat, from.Lon, out int tiles);
+                if (area.Count > 0)
+                {
+                    var (areaQueued, had) = prefetchArea(area, from.Lat, from.Lon);
+                    queued += areaQueued;
+                    Log.Info($"SimBrief: {place} - {area.Count} textures in the {tiles} scenery tiles X-Plane loads there: " +
+                             $"{had} already have what X-Plane will want, {areaQueued} queued ({target.Name})");
+                    continue;
+                }
+                Log.Info($"SimBrief: {target.Name} has no readable scenery tiles around {place}; building what is within {radiusKm:0.#} km instead");
+            }
             IReadOnlyList<VirtualPath> near = AirportTextures.Near(target.Source, from.Lat, from.Lon, radiusKm, MaxTextures);
             if (near.Count == 0)
             {

@@ -45,10 +45,11 @@ internal sealed class MipWarmer : IDisposable
     private static readonly TimeSpan LoadingReportInterval = TimeSpan.FromSeconds(10), QuietReportInterval = TimeSpan.FromMinutes(2);
 
     /// <summary>
-    /// A texture to warm; <paramref name="Mip"/> and <paramref name="Priority"/> fixed for the flight-path prefetch.
-    /// <paramref name="Recheck"/>: queued again because the aircraft moved, not because X-Plane loaded it.
+    /// A texture to warm; <paramref name="Mip"/> and <paramref name="Priority"/> fixed for the flight-path and departure
+    /// prefetch. <paramref name="Recheck"/>: queued again because the aircraft moved, not because X-Plane loaded it.
+    /// <paramref name="Distance"/>: from the departure, for the order until X-Plane sends a position.
     /// </summary>
-    private readonly record struct Request(VirtualPath Texture, int? Mip = null, int? Priority = null, bool Recheck = false);
+    private readonly record struct Request(VirtualPath Texture, int? Mip = null, int? Priority = null, bool Recheck = false, double? Distance = null);
 
     private readonly TextureCatalog _catalog;
     private readonly TextureStreamer _streamer;
@@ -121,6 +122,47 @@ internal sealed class MipWarmer : IDisposable
         return textures.Count;
     }
 
+    /// <summary>
+    /// The SimBrief departure: every texture of the scenery X-Plane loads around the departure, each to the level X-Plane
+    /// will want with the aircraft there (full detail beside it, the middle levels further out, a base tile far away),
+    /// the same choice load-ahead makes once X-Plane sends a position, only made before X-Plane opens anything.
+    /// Returns how many were queued and how many had what they need already.
+    /// </summary>
+    public (int Queued, int Had) PrefetchAround(IReadOnlyList<VirtualPath> textures, double lat, double lon)
+    {
+        var requests = new List<Request>(textures.Count);
+        int had = 0;
+        foreach (VirtualPath texture in textures)
+        {
+            if (_streamer.Get(texture) is not { } t) continue;
+            double distance = Geo.DistanceM(lat, lon, t.Lat, t.Lon);
+            int wanted = _streamer.Model.MipFor(distance, t.SizeM, t.Layout.Size);
+            int mip = Math.Min(wanted, t.BaseMip);
+            int real = _streamer.RealFrom(t);
+            if (real <= mip)
+            {
+                had++;
+                continue;
+            }
+            // Its base tile first, as load-ahead gives every texture (see Prefetch).
+            if (mip < t.BaseMip && real > t.BaseMip) _streamer.Warm(texture, t.BaseMip, FetchPriority.Warm);
+            requests.Add(new Request(texture, mip, PriorityOf(t, wanted), Distance: distance));
+        }
+        lock (_gate)
+            foreach (Request request in requests)
+                _waiting[request.Texture.Key] = request;
+        Wake();
+        return (requests.Count, had);
+    }
+
+    /// <summary>A load-ahead build's priority by the band X-Plane will read the texture in.</summary>
+    private static int PriorityOf(StreamedTexture t, int wanted) => TextureStreamer.BandOf(t, wanted) switch
+    {
+        Band.Near => FetchPriority.NearWarm,
+        Band.Middle => FetchPriority.Warm + wanted,
+        _ => FetchPriority.Background,
+    };
+
     private void Add(Request request)
     {
         lock (_gate) _waiting.TryAdd(request.Texture.Key, request);
@@ -133,11 +175,12 @@ internal sealed class MipWarmer : IDisposable
     }
 
     /// <summary>The level to fetch and its priority, and the distance (for the order); null when it is not a photo texture.</summary>
-    internal (StreamedTexture Texture, int Mip, int Priority, double Distance)? Target(VirtualPath path, int? mip = null, int? priority = null)
+    internal (StreamedTexture Texture, int Mip, int Priority, double Distance)? Target(VirtualPath path, int? mip = null, int? priority = null,
+        double? departureDistance = null)
     {
         if (_streamer.Get(path) is not { } t) return null;
         if (_view.Current is not { } camera)
-            return (t, mip ?? t.BaseMip, priority ?? FetchPriority.Background, double.MaxValue);
+            return (t, mip ?? t.BaseMip, priority ?? FetchPriority.Background, departureDistance ?? double.MaxValue);
         double distance = ViewTracker.DistanceM(camera, t.Lat, t.Lon);
         if (mip is int fixedMip) return (t, fixedMip, priority ?? FetchPriority.Warm, distance);
 
@@ -150,13 +193,7 @@ internal sealed class MipWarmer : IDisposable
         }
         int wanted = _streamer.Model.MipFor(soon, t.SizeM, t.Layout.Size);
         int target = Math.Min(wanted, t.BaseMip);
-        int targetPriority = TextureStreamer.BandOf(t, wanted) switch
-        {
-            Band.Near => FetchPriority.NearWarm,
-            Band.Middle => FetchPriority.Warm + wanted,
-            _ => FetchPriority.Background,
-        };
-        return (t, target, targetPriority, distance);
+        return (t, target, PriorityOf(t, wanted), distance);
     }
 
     private async Task RunAsync()
@@ -184,7 +221,7 @@ internal sealed class MipWarmer : IDisposable
         lock (_gate) waiting = [.. _waiting.Values];
         if (waiting.Length == 0) return;
         var ranked = waiting
-            .Select(r => (Request: r, Target: Target(r.Texture, r.Mip, r.Priority)))
+            .Select(r => (Request: r, Target: Target(r.Texture, r.Mip, r.Priority, r.Distance)))
             .OrderBy(x => x.Target?.Priority ?? int.MaxValue).ThenBy(x => x.Target?.Distance ?? double.MaxValue);
         foreach (var (request, target) in ranked)
         {

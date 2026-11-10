@@ -170,6 +170,30 @@ public sealed class SimBriefPrefetchTests : IDisposable
         Assert.Equal(0, await prefetch.RunAsync(TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task With_streaming_the_whole_area_XPlane_loads_is_queued_and_without_its_DSFs_the_circle()
+    {
+        string package = Package(AtAirport, Around, FarAway);
+        _tree.WriteBytes("pkg/Earth nav data/+40+010/+48+011.dsf", DepartureAreaTests.Dsf($"terrain/{AtAirport.Stem}.ter", $"terrain/{FarAway.Stem}.ter"));
+        var area = new List<VirtualPath>();
+        var whole = new List<VirtualPath>();
+        DepartureTarget Target(string source) => new("pkg", source, _ => false, t => { whole.AddRange(t); return t.Count; },
+            (textures, _, _) => { area.AddRange(textures); return (textures.Count - 1, 1); });
+        CancellationToken ct = TestContext.Current.CancellationToken;
+
+        int queued = await new DeparturePrefetch(_ => Task.FromResult<FlightOrigin?>(new FlightOrigin("EDDM", Lat, Lon)), () => null, [Target(package)], 10).RunAsync(ct);
+        Assert.Equal(1, queued);
+        Assert.Equal([AtAirport.Stem, FarAway.Stem], Stems(area)); // as the DSF names them, far ones too
+        Assert.Empty(whole);
+
+        // A package without its DSFs there (or 7-Zip ones): the textures within the radius, whole.
+        Directory.Delete(_tree.PathOf("pkg/Earth nav data"), recursive: true);
+        area.Clear();
+        await new DeparturePrefetch(_ => Task.FromResult<FlightOrigin?>(new FlightOrigin("EDDM", Lat, Lon)), () => null, [Target(package)], 10).RunAsync(ct);
+        Assert.Empty(area);
+        Assert.Equal([AtAirport.Stem, Around.Stem], Stems(whole));
+    }
+
     // ---------------------------------------------------------------- the settings
 
     [Fact]

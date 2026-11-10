@@ -199,7 +199,8 @@ internal sealed class MountSession : IDisposable
         DepartureTarget[] targets = [.. _mounts
             .Select(m => (Mount: m, Prefetch: m.Warmer is { } warmer ? warmer.Prefetch : m.Scheduler is { } scheduler ? scheduler.Prefetch : (Func<IReadOnlyList<VirtualPath>, int>?)null))
             .Where(m => m.Prefetch is not null)
-            .Select(m => new DepartureTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, path => m.Mount.Roots.CachedFile(path) is not null, m.Prefetch!))];
+            .Select(m => new DepartureTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, path => m.Mount.Roots.CachedFile(path) is not null, m.Prefetch!,
+                m.Mount.Warmer is { } warmer ? warmer.PrefetchAround : null))];
         if (targets.Length == 0)
         {
             Log.Info("SimBrief: departure prefetch needs an imagery provider and load-ahead (or aircraft tracking); it is off for this run");
