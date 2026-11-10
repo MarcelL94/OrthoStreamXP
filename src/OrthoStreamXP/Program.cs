@@ -11,8 +11,10 @@ CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.Invarian
 
 // What earlier versions kept beside the program, or in the cache, moves to the app's folder before anything reads it.
 OrthoStreamXP.Setup.LegacyNames.MoveSettings(AppContext.BaseDirectory, OrthoStreamXP.Setup.AppPaths.Settings);
-OrthoStreamXP.Setup.LegacyNames.MoveCache(OrthoStreamXP.Setup.SettingsDocument.Load(OrthoStreamXP.Setup.AppPaths.Settings).Get("cache"),
-    OrthoStreamXP.Setup.AppPaths.Logs, OrthoStreamXP.Setup.AppPaths.History);
+OrthoStreamXP.Setup.SettingsDocument settings = OrthoStreamXP.Setup.SettingsDocument.Load(OrthoStreamXP.Setup.AppPaths.Settings);
+OrthoStreamXP.Setup.LegacyNames.MoveCache(settings.Get("cache"), OrthoStreamXP.Setup.AppPaths.Logs, OrthoStreamXP.Setup.AppPaths.History);
 Directory.CreateDirectory(OrthoStreamXP.Setup.AppPaths.History);
+// The regions 1.1.1 installed as OSXP_* take their new names before the window lists them.
+OrthoStreamXP.Setup.LegacyPackageNames.Move(settings.Get("base-packages"), settings.Get("cache"), settings.Get("xplane"));
 
 return GuiHost.Run();

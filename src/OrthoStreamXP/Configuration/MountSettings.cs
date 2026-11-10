@@ -82,6 +82,8 @@ internal sealed record MountSettings
         var texturePlan = new TexturePlan(levelChange);
         // One cache folder for every setup: each texture plan keeps its files in its own subfolder.
         string planCache = Path.Join(cache, texturePlan.FolderName);
+        // The regions an earlier version installed take their new names before the packages are listed (nothing is mounted yet).
+        Setup.LegacyPackageNames.Move(values.String("base-packages"), cache, values.String("xplane"));
         IReadOnlyList<PackagePlan> packages = PlanPackages(values, planCache, out string? customScenery, out IReadOnlyList<string> notPackages);
         string sceneryPacksValue = values.String("scenery-packs") ?? "on";
         bool updateSceneryPacks = ParseOnOff(sceneryPacksValue) ?? throw new SettingsException($"scenery-packs must be on or off, not '{sceneryPacksValue}'");
