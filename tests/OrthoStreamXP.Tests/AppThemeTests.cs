@@ -18,13 +18,19 @@ public sealed class AppThemeTests
 #pragma warning restore WPF0001
 
     [Fact]
-    public void Each_click_goes_windows_light_dark_and_back_to_windows()
+    public void A_click_switches_between_light_and_dark()
     {
-        ThemeChoice choice = ThemeChoice.Of(AppTheme.System);
-        var seen = new List<AppTheme>();
-        for (int i = 0; i < 4; i++, choice = choice.Next) seen.Add(choice.Theme);
+        Assert.Equal(AppTheme.Dark, ThemeChoice.Light.Other.Theme);
+        Assert.Equal(AppTheme.Light, ThemeChoice.Dark.Other.Theme);
+    }
 
-        Assert.Equal([AppTheme.System, AppTheme.Light, AppTheme.Dark, AppTheme.System], seen);
+    [Fact]
+    public void Until_a_click_the_button_shows_the_look_windows_gives()
+    {
+        Assert.Same(ThemeChoice.Light, ThemeChoice.Of(AppTheme.System, () => true));
+        Assert.Same(ThemeChoice.Dark, ThemeChoice.Of(AppTheme.System, () => false));
+        Assert.Same(ThemeChoice.Dark, ThemeChoice.Of(AppTheme.Dark, () => true));
+        Assert.Same(ThemeChoice.Light, ThemeChoice.Of(AppTheme.Light, () => false));
     }
 
     [Fact]

@@ -1,8 +1,9 @@
 using System.Windows;
+using Microsoft.Win32;
 
 namespace OrthoStreamXP.Gui;
 
-/// <summary>The window's colours: the same as Windows, or always light or dark.</summary>
+/// <summary>The window's colours: the same as Windows until the person picks light or dark.</summary>
 internal enum AppTheme
 {
     System,
@@ -10,28 +11,22 @@ internal enum AppTheme
     Dark,
 }
 
-/// <summary>The sidebar's theme button: what it shows for a theme, and which theme a click switches to.</summary>
+/// <summary>The sidebar's theme button: what it shows for the current look, and the look a click switches to.</summary>
 internal sealed record ThemeChoice(string Label, string Glyph, AppTheme Theme)
 {
-    /// <summary>The themes in the order a click goes through them.</summary>
-    public static IReadOnlyList<ThemeChoice> All { get; } =
-    [
-        new("Windows theme", "", AppTheme.System),
-        new("Light theme", "", AppTheme.Light),
-        new("Dark theme", "", AppTheme.Dark),
-    ];
+    public static ThemeChoice Light { get; } = new("Light theme", "", AppTheme.Light);
+    public static ThemeChoice Dark { get; } = new("Dark theme", "", AppTheme.Dark);
 
-    public static ThemeChoice Of(AppTheme theme) => All.FirstOrDefault(c => c.Theme == theme) ?? All[0];
-
-    /// <summary>The theme after this one, back to the first after the last.</summary>
-    public ThemeChoice Next => All[(IndexOf(Theme) + 1) % All.Count];
-
-    private static int IndexOf(AppTheme theme)
+    /// <summary>The choice for a theme; the Windows one shows as the look Windows gives it.</summary>
+    public static ThemeChoice Of(AppTheme theme, Func<bool> windowsUsesLight) => theme switch
     {
-        for (int i = 0; i < All.Count; i++)
-            if (All[i].Theme == theme) return i;
-        return 0;
-    }
+        AppTheme.Light => Light,
+        AppTheme.Dark => Dark,
+        _ => windowsUsesLight() ? Light : Dark,
+    };
+
+    /// <summary>Light after dark, dark after light.</summary>
+    public ThemeChoice Other => Theme == AppTheme.Light ? Dark : Light;
 }
 
 internal static class AppThemeExtensions
@@ -51,4 +46,17 @@ internal static class AppThemeExtensions
         if (Application.Current is { } app) app.ThemeMode = theme.ToThemeMode();
     }
 #pragma warning restore WPF0001
+}
+
+/// <summary>Whether Windows shows apps light or dark (Settings > Personalisation > Colours).</summary>
+internal static class WindowsTheme
+{
+    private const string Personalize = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+
+    /// <summary>True for light apps, also when Windows does not say (older versions default to light).</summary>
+    public static bool AppsUseLight()
+    {
+        using RegistryKey? key = Registry.CurrentUser.OpenSubKey(Personalize);
+        return key?.GetValue("AppsUseLightTheme") is not int value || value != 0;
+    }
 }
