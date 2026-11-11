@@ -56,7 +56,8 @@ Never claim a test passed without running it.
        pre-warm ever ran (`GroundDecision.Rolled`, once) drops the departure's requests too.
 4. [x] **R11 / H5**: stale-OFP guard (`params.time_generated` at mount start, cancel on the first far-away position,
        log the skip), plus the rest of T2 and the `time_generated` part of T5.
-5. [ ] **M2**: track the ground pre-warm task, await it in `StopAsync`, log unexpected exceptions, plus T4.
+5. [x] **M2**: track the ground pre-warm task, await it in `StopAsync`, log unexpected exceptions, plus T4.
+       L1 (the duplicate "rolling" line) is fixed with it.
 6. [ ] **M3**: drop a failing base step after N attempts, count only real build starts, plus T3.
 7. [ ] **F3**: give the memory back once the ground queue is empty (ask how first, see "Stop and ask").
 8. [ ] **R7**: one shared `orthostreamxp/<version>` User-Agent for the tile downloads, the Setup test and SimBrief.

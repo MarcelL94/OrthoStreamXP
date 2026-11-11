@@ -230,7 +230,7 @@ internal sealed class MountSession : IDisposable
             .Select(m => (Mount: m, Warmer: m.Warmer!))
             .Select(m => new GroundTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, m.Warmer.PrefetchGround, m.Warmer.CancelGround,
                 m.Warmer.CancelDeparture))];
-        if (ground.Length > 0 && listener is not null) _ground = new GroundPrewarm(plan, ground);
+        if (ground.Length > 0 && listener is not null) _ground = new GroundPrewarm(plan, ground, stop: stop);
         _departure = Task.Run(async () =>
         {
             try
@@ -348,7 +348,8 @@ internal sealed class MountSession : IDisposable
             else
                 await finished.ConfigureAwait(false);
         }
-        foreach (Task? loop in new[] { _summaryLoop, _sampleLoop, _departure })
+        // The ground pre-warm's queuing goes into the packages' load-ahead: it ends before they are disposed.
+        foreach (Task? loop in new[] { _summaryLoop, _sampleLoop, _departure, _ground?.Running })
         {
             if (loop is null) continue;
             try

@@ -236,6 +236,102 @@ public sealed class GroundPrewarmTests : IDisposable
         Assert.Equal(0, atGate);
     }
 
+    private static CameraReport Parked(DateTime at, double kt = 0) =>
+        new(Eddv.Lat, Eddv.Lon, 3, null, kt > 0 ? new Motion(kt / 1.943844, 270) : null, false, at);
+
+    [Fact]
+    public async Task Stopping_streaming_while_it_queues_neither_throws_nor_queues_on()
+    {
+        // M2: the packages' load-ahead is disposed while the pre-warm is still queuing.
+        using var stop = new CancellationTokenSource();
+        var plan = Task.FromResult<FlightPlan?>(new FlightPlan(Eddv, Eddf, Eddk, ClimbSouth()));
+        int calls = 0;
+        var (pkg, _) = Package(Everywhere);
+        var target = pkg with
+        {
+            Prefetch = (_, _, _) =>
+            {
+                calls++;
+                stop.Cancel(); // streaming stops during the first phase...
+                throw new ObjectDisposedException("MipWarmer"); // ...and the load-ahead is gone
+            },
+        };
+        var t0 = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        var prewarm = new GroundPrewarm(plan, [target], stop: stop.Token, run: a => Task.Run(a, TestContext.Current.CancellationToken));
+
+        prewarm.OnCamera(Parked(t0));
+        prewarm.OnCamera(Parked(t0.AddSeconds(31)));
+        await prewarm.Running; // completes, doesn't throw
+        Assert.Equal(1, calls); // the alternate and the climb were not queued after the stop
+
+        prewarm.OnCamera(Parked(t0.AddSeconds(40), kt: 60));
+        Assert.True(prewarm.Running.IsCompletedSuccessfully);
+    }
+
+    [Fact]
+    public async Task An_unexpected_failure_while_queuing_is_logged_not_lost()
+    {
+        var plan = Task.FromResult<FlightPlan?>(new FlightPlan(Eddv, Eddf, null, []));
+        var (pkg, _) = Package(Everywhere);
+        var target = pkg with { Prefetch = (_, _, _) => throw new InvalidOperationException("a bug") };
+        var lines = new List<string>();
+        void Sink(string line)
+        {
+            if (line.Contains("Ground pre-warm failed", StringComparison.Ordinal)) lock (lines) lines.Add(line);
+        }
+        var t0 = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        var prewarm = new GroundPrewarm(plan, [target], run: a => Task.Run(a, TestContext.Current.CancellationToken));
+        Log.Sink += Sink;
+        try
+        {
+            prewarm.OnCamera(Parked(t0));
+            prewarm.OnCamera(Parked(t0.AddSeconds(31)));
+            await prewarm.Running;
+            Assert.True(Log.Flush(TimeSpan.FromSeconds(5)));
+        }
+        finally
+        {
+            Log.Sink -= Sink;
+        }
+        Assert.Contains(lines, l => l.Contains("InvalidOperationException: a bug", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_takeoff_roll_is_logged_once_even_while_it_still_queues()
+    {
+        // L1: the aircraft rolls before the queuing is done.
+        var plan = Task.FromResult<FlightPlan?>(new FlightPlan(Eddv, Eddf, null, []));
+        Action? pending = null;
+        int cancels = 0;
+        var target = new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _) => (0, 0), () => ++cancels, () => 0);
+        var lines = new List<string>();
+        void Sink(string line)
+        {
+            if (line.Contains("rolling for takeoff", StringComparison.Ordinal)) lock (lines) lines.Add(line);
+        }
+        var t0 = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        var prewarm = new GroundPrewarm(plan, [target], run: a =>
+        {
+            pending = a; // still queuing
+            return Task.CompletedTask;
+        });
+        Log.Sink += Sink;
+        try
+        {
+            prewarm.OnCamera(Parked(t0));
+            prewarm.OnCamera(Parked(t0.AddSeconds(31)));
+            prewarm.OnCamera(Parked(t0.AddSeconds(60), kt: 60)); // the roll
+            pending!(); // the queuing ends after it
+            Assert.True(Log.Flush(TimeSpan.FromSeconds(5)));
+        }
+        finally
+        {
+            Log.Sink -= Sink;
+        }
+        Assert.Single(lines);
+        Assert.Equal(2, cancels); // what was queued after the roll's cancel is dropped too
+    }
+
     // ---------------------------------------------------------------- what it queues
 
     private sealed record Call(int Phase, int Textures, double FirstDistanceM);

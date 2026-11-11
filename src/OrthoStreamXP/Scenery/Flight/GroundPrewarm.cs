@@ -73,7 +73,10 @@ internal sealed record GroundTarget(string Name, string Source,
 /// photos are noticed first), each as X-Plane will want it from the gate there; then the climb from the departure to
 /// the top of climb (<see cref="ClimbRoute"/>), each texture as X-Plane will want it when the aircraft passes.
 /// </summary>
-internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<GroundTarget> targets)
+/// <param name="stop">The session's stop: no queuing after it, and a <see cref="Queue"/> in progress ends early.</param>
+/// <param name="run">Runs the queuing off X-Plane's UDP thread (<see cref="Task.Run(Action)"/> when null; tests run it inline).</param>
+internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<GroundTarget> targets, Func<Action, Task>? run = null,
+    CancellationToken stop = default)
 {
     public const int Arrival = 0, Alternate = 1, Route = 2;
 
@@ -81,10 +84,13 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
     private volatile bool _stopped;
     private bool _positionChecked;
 
+    /// <summary>The queuing once the pre-warm started; the session awaits it before the packages go away.</summary>
+    public Task Running { get; private set; } = Task.CompletedTask;
+
     /// <summary>Every position X-Plane sends (from its UDP thread): starts or stops the pre-warm when the watch says so.</summary>
     public void OnCamera(CameraReport camera)
     {
-        if (!plan.IsCompletedSuccessfully || plan.Result is not { } flight) return;
+        if (stop.IsCancellationRequested || !plan.IsCompletedSuccessfully || plan.Result is not { } flight) return;
         if (!camera.Inferred && !_positionChecked)
         {
             _positionChecked = true;
@@ -94,18 +100,7 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
         switch (_watch.Update(camera.Lat, camera.Lon, camera.Motion?.SpeedMps * 1.943844, camera.HeightAglM, camera.Inferred, camera.ReceivedUtc))
         {
             case GroundDecision.Start:
-                _ = Task.Run(() =>
-                {
-                    try
-                    {
-                        Queue(flight);
-                    }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                    {
-                        Log.Warning($"Ground pre-warm failed ({ex.Message})");
-                    }
-                    if (_stopped) Cancel(); // the aircraft rolled while it was being queued
-                });
+                Running = (run ?? Task.Run)(() => QueueInBackground(flight));
                 break;
             case GroundDecision.Stop:
                 _stopped = true;
@@ -118,6 +113,40 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
         }
     }
 
+    /// <summary>
+    /// <see cref="Queue"/> off the UDP thread. Never throws: a failure is logged (the pre-warm is a hint, never a reason
+    /// for streaming to fail), and the session's stop ends it quietly.
+    /// </summary>
+    private void QueueInBackground(FlightPlan flight)
+    {
+        try
+        {
+            Queue(flight);
+        }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+            return; // streaming stopped
+        }
+        catch (ObjectDisposedException) when (stop.IsCancellationRequested)
+        {
+            return; // streaming stopped while a package was queuing
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warning($"Ground pre-warm failed ({ex.Message})");
+        }
+#pragma warning disable CA1031 // Anything else is a bug, but on a background thread nobody would see it: log it, don't lose it.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            Log.Warning($"Ground pre-warm failed unexpectedly ({ex.GetType().Name}: {ex.Message})");
+        }
+        if (!_stopped) return;
+        // The aircraft rolled while it was being queued: what went in after the roll's cancel goes too.
+        int late = targets.Sum(t => t.Cancel());
+        if (late > 0) Log.Info($"Ground pre-warm: {late} more textures queued during the takeoff roll were dropped");
+    }
+
     /// <summary>Queues the three phases in every package; returns how many textures were queued.</summary>
     internal int Queue(FlightPlan flight)
     {
@@ -125,6 +154,7 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
         int queued = 0;
         foreach (GroundTarget target in targets)
         {
+            stop.ThrowIfCancellationRequested();
             if (flight.Destination is { } to)
             {
                 if (FlightPlan.SamePlace(to, flight.Origin))
@@ -149,6 +179,7 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
     private int Area(GroundTarget target, FlightOrigin airport, int phase, string what)
     {
         if (_stopped) return 0;
+        stop.ThrowIfCancellationRequested();
         IReadOnlyList<VirtualPath> textures = SceneryArea.Textures(target.Source, airport.Lat, airport.Lon, out int tiles);
         if (textures.Count == 0)
         {
@@ -167,6 +198,7 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
     private int Climb(GroundTarget target, FlightPlan flight)
     {
         if (_stopped) return 0;
+        stop.ThrowIfCancellationRequested();
         ClimbRoute.Climb climb = ClimbRoute.Of(flight);
         if (climb.Samples.Count < 2)
         {
