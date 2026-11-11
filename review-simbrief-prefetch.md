@@ -7,6 +7,7 @@ is unchanged up to `e59478f` (later commits only touch `CLAUDE.md` and this file
   `MountSession`.
 - **Round 2** (2026-11-11 midday): every changed file, including the GUI, the tests and the `MipWarmer` /
   `TextureStreamer` internals the new code relies on. Round 1's findings are kept, re-checked and re-ranked below.
+- **Appendix** (2026-11-11): ideas for lowering OrthoStreamXP's CPU load, unrelated to SimBrief (last section, P1-P4).
 
 Context: a feature proposal has been posted upstream (flysimdev/OrthoStreamXP). It describes this branch as work in
 progress and asks whether to send one PR or several. This file is the to-do list until that PR.
@@ -279,3 +280,57 @@ These answer H2, H3 and M4 without guessing:
 - The first 2 minutes after takeoff: the wait times of X-Plane's near reads (`NearRead`), compared with a flight without
   the ground pre-warm.
 - Whether a camera move in the outside view ever triggered `GroundDecision.Stop` before the real roll.
+
+## Unrelated to SimBrief: lowering OrthoStreamXP's CPU load
+
+X-Plane is mostly limited by its main thread. OrthoStreamXP's builds only cost frames when they saturate the CPU or land
+on X-Plane's cores. Moving the work to the GPU (ComputeSharp / DirectX 12 compute) is possible, but it competes with
+X-Plane's Vulkan rendering for GPU time and VRAM (12 GB on an RTX 5070), so it can make stutters worse. These four
+steps come first, in this order. Consider a GPU path, opt-in with CPU fallback, only if step 1 still shows encoding
+dominating after steps 2-4.
+
+Today: there is no SIMD anywhere (`System.Runtime.Intrinsics` is unused), no lowered thread priority, and the work runs
+in `Parallel.For` on thread-pool threads (`Images.cs:104/123/135`, `Dds.cs:214`). `encoder-workers` (default 4) caps the
+parallelism.
+
+### P1. Profile where a build's CPU time goes
+
+- `Dds.Encode` already returns `mipmapS` and `bc1S` (`TextureBuilder.cs:45`). Add the time spent decoding
+  (`Images.DecodeTile`, called from `TileSource.cs:307/347`), stitching, resizing (`ResizeTo`/`BoxHalf`) and colour
+  work (`PhotoColours`).
+- Sum them per session by stage and texture size, and put them in the flight report or the summary log line ("CPU per
+  4096 px build: decode x ms, resize y, mips z, BC1 w, colour v").
+- Run one flight with this, plus a short sampling profile (dotnet-trace / PerfView) during a cold load. The result
+  decides which of P2-P4 (or a GPU path) is worth it.
+
+### P2. Run the build workers at BelowNormal priority
+
+- The goal: Windows always gives X-Plane's threads the core first, and OrthoStreamXP takes what is left.
+- **Do not lower the whole process** (`ProcessPriorityClass.BelowNormal`). The WinFsp callbacks that answer X-Plane's
+  reads run in this process, and their latency is what X-Plane waits for.
+- Instead, run decode, resize, mips, BC1 and colour on dedicated threads with `ThreadPriority.BelowNormal`: a small
+  custom `TaskScheduler` with `encoder-workers` threads, passed as `ParallelOptions.TaskScheduler` to the
+  `Parallel.For` calls and used for `TileSource`'s decodes. Thread-pool threads should not have their priority changed.
+- It is cheap to try: compare frame times in a cold-load flight with and without it.
+
+### P3. SIMD for BC1 and the mip filter (AVX2 via `Vector256`)
+
+- BC1 (`Dds.cs`, `DdsBlocks.cs`): the block min/max or endpoint search, the colour-index selection and the RGB → 565
+  packing are classic SIMD work. Processing 2-4 blocks per vector or vectorising within the block often gives 3-8× on
+  this code.
+- `Images.BoxHalf` / `BoxHalfInto` (2×2 averages over RGB rows) and `ResizeBicubic` (the horizontal and vertical passes)
+  vectorise well too.
+- Keep the scalar path as the fallback (`Vector256.IsHardwareAccelerated`). Add tests that compare the output byte for
+  byte, or within a small tolerance, with the scalar version on a few real tiles.
+
+### P4. Decode coarse tiles at reduced size
+
+- The ability already exists: `Images.Decode(encoded, scale)` uses libjpeg-turbo's DCT scaling via
+  `SKCodec.GetScaledDimensions` (1/2, 1/4, 1/8). Today only `CacheAreas` (the cache map) uses it.
+- The build path decodes every tile at full 256 px and then halves it in a loop: `TextureBuilder.CopyTileAsync`
+  (`:201`, `BoxHalf` at `:208`) whenever `tilePx < 256` (smaller textures, `level-change` < 0, stand-ins). Decoding
+  directly at `tilePx / 256` skips most of the decode **and** the halving.
+- This needs `TileSource.GetTileAsync` to accept a decode scale. Its RAM cache holds decoded full-size tiles, so cache
+  the scaled result under its own key, or decode scaled only when the full-size tile isn't cached anyway.
+- Check the result visually: DCT scaling filters slightly differently from `BoxHalf`, which matters for colour
+  matching across seams.
