@@ -1,11 +1,43 @@
 # Every pull request: build, then run the tests, the real WinFsp mount with synthetic imagery among them.
+# A pull request that only changes documentation skips the build and tests. The "test" job then shows as skipped,
+# which counts as passed for a required check. (A workflow-level paths-ignore would leave the check pending.)
 name: CI
 
 on:
   pull_request:
 
 jobs:
+  # Is anything besides documentation changed? Lists the PR's files on a cheap Linux runner.
+  # A file counts as documentation only if it matches the pattern below. Anything else (code, tests, build files,
+  # the installer, other workflows) runs the full build, so a file nobody expected errs toward testing.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Look for non-documentation changes
+        id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        # HEAD is the PR merged into its base (the checkout's default), so the three-dot diff is the PR's own changes.
+        run: |
+          files=$(git diff --name-only "$BASE"...HEAD)
+          echo "Changed files:"; echo "$files"
+          docs='^(docs/|release-notes/|README\.md$|CLAUDE\.md$|LICENSE$|mkdocs\.yml$|\.github/workflows/pages\.yml$)'
+          if [ -n "$files" ] && ! echo "$files" | grep -qvE "$docs"; then
+            echo "Only documentation changed: skipping the build and tests"
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
