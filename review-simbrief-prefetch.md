@@ -79,8 +79,11 @@ Never claim a test passed without running it.
         ground pre-warm has work, "Load-ahead: N textures waiting; the last pass took X ms, the longest Y ms". H3: at
         the roll, "Load-ahead at the takeoff roll: N detailed, N small and N base builds running, M of them the ground
         pre-warm's". Near-read waits after takeoff: the existing 2-min streaming summaries already show them.
-11. [ ] **H2 / H3**: the EDDV → ENGM flight did not show them (F2, F7). Fix them only if the new logging shows them on
+11. [x] **H2 / H3**: the EDDV → ENGM flight did not show them (F2, F7). Fix them only if the new logging shows them on
         a cold or slow run. Otherwise leave them as measured-but-fine and note that here.
+        Left as they are for now: not seen in flight. The step 10 logging (pass time and queue size, builds running at
+        the roll) answers them on the next cold-cache or slow-line flight; reopen if a pass takes more than ~50 ms or
+        ground builds still hold detailed places at the roll.
 12. [ ] **R4**: the per-session download budget for the prefetch (setting, counter in the downloader, log when used up).
 13. [ ] **R5**: unflown areas rank as least recently used in `CacheAreas.Trim`, plus a test (F5).
 14. [ ] **M1 / R9**: the "Reload SimBrief flight plan" button on Home (button only, no automatic fetch), plus its tests.
