@@ -7,6 +7,7 @@ is unchanged up to `e59478f` (later commits only touch `CLAUDE.md` and this file
   `MountSession`.
 - **Round 2** (2026-11-11 midday): every changed file, including the GUI, the tests and the `MipWarmer` /
   `TextureStreamer` internals the new code relies on. Round 1's findings are kept, re-checked and re-ranked below.
+- **Maintainer answer** (2026-11-11): his requirements for the upstream PR, R1-R12 (section right after "Overall").
 - **Appendix** (2026-11-11): ideas for lowering OrthoStreamXP's CPU load, unrelated to SimBrief (last section, P1-P4).
 
 Context: a feature proposal has been posted upstream (flysimdev/OrthoStreamXP). It describes this branch as work in
@@ -34,6 +35,103 @@ Strong points:
 
 The main risks are not in the new classes themselves. They are in how a **much bigger request queue** behaves inside
 the existing `MipWarmer` (H1-H4).
+
+## Maintainer requirements (upstream answer, 2026-11-11)
+
+The maintainer (flysimdev) wants the feature in OrthoStreamXP. His bar, in his own P.S.: **it must not make the existing
+streaming worse**. He is not a SimBrief user himself. Keep it off by default and SimBrief failures log-only (both done).
+
+### PR structure: one PR into `develop`, small commits in this order
+
+1. The `simbrief-user` setting, the Setup step with its connection test, OFP fetch and parse, and the departure
+   prefetch.
+2. The gate pre-warm (arrival and climb to TOC), including the cancel on the takeoff roll.
+3. The alternate, as its own commit **behind its own switch** (or left out). It is rarely flown, so it is the least
+   likely to pay for its downloads.
+
+The current branch has this mixed (the alternate is part of the ground pre-warm). Reorder or squash before the PR. The
+unrelated changes (Branch scope) don't belong in this PR. He offered feedback on a **draft PR** early: open one once
+R1 and R2 are done.
+
+### Requirements and their status in the code
+
+| ID | Requirement | Status | Work |
+|---|---|---|---|
+| R1 | Gate pre-warm must never delay real reads | **Open** (H1, H3) | Fix H1 (ground requests block load-ahead) and H3 (ground builds hold the heavy slots), measure H2 |
+| R2 | Departure prefetch at about `Warm` | **Open** | Near textures get `NearWarm` today (`MipWarmer.cs:189` via `PriorityOf`, `:215`); cap departure at `FetchPriority.Warm` |
+| R3 | Gate pre-warm at `Background` or below | Done | `GroundPriority` = 401-403, below `Background` (400) |
+| R4 | Download budget per session | **Open**, new | See below |
+| R5 | Pre-warm must not evict what was just built | Partly; **open** for a related issue | See below |
+| R6 | Reuse the existing models | **Open**, ask him | See below |
+| R7 | User-Agent `orthostreamxp/<version>` like the tile downloads | **Open** (L6) | One shared constant for the tile downloads, the Setup test and SimBrief |
+| R8 | Never log the username or Pilot ID | Done (checked) | No log line contains it, and the URL with `?username=` is never logged. Add a test that the problems `SimBriefAnswer` can carry never contain the user |
+| R9 | Fetch once per mount, plus an explicit re-fetch if added, no polling | Done for once per mount | M1's re-fetch must be a single explicit action (a Home "Reload flight plan" button, or one fetch when the aircraft is parked), never periodic. Ask which he means by "explicit" |
+| R10 | Short timeout, a slow SimBrief never holds up the mount | Done | 10 s, and the fetch runs in the background (L7 dropped) |
+| R11 | Stale OFP guard: near the origin and/or recent, otherwise log the skip | **Open** (H5) | See below: the position check alone kills the main win |
+| R12 | Numbers in the PR: tiles and MB, build time, hit rate | **Open**, new | See below |
+
+### R4. Download budget
+
+- Today nothing limits the pre-warm. Arrival, alternate and climb can mean thousands of tiles from Bing, Esri or
+  Geoportal, and many are never seen. Getting rate-limited or blocked would hit **every** user, not just SimBrief users.
+- Proposal:
+  - A per-session budget for prefetch downloads only (departure plus pre-warm), e.g. `simbrief-max-mb` (default
+    something like 500 MB) or a tile count. Count the bytes in the tile downloader for tickets marked as prefetch.
+  - When it is used up, drop the remaining prefetch requests and log once ("SimBrief prefetch: download budget of N MB
+    used, the rest is left to load-ahead").
+  - Spend it in order of value: departure first, then arrival, then the climb, then the alternate. That is the existing
+    phase order.
+- Load-ahead and X-Plane's own reads never count against the budget.
+
+### R5. Cache eviction
+
+- Mid-flight eviction can't happen: `TrimCache` runs only at mount start and stop (`MountSession.cs:87`, `:369`). The
+  departure textures built at mount start are therefore safe for the session.
+- **Related problem found:** `CacheAreas.Trim` removes areas by `LastUsedUtc`. That comes from `AreaUsage`, noted when
+  **X-Plane opens** a texture (`SceneryFileSystem.cs:137/162`). An area X-Plane never opened falls back to its newest
+  **file write time** (`CacheAreas.cs:38`).
+- So a pre-warmed area that was never flown (an alternate, an unflown climb corridor) counts as "used just now".
+  It survives the next trim, while older areas the pilot really flew are removed first. With a tight `cache-limit`,
+  the pre-warm pushes out the pilot's real history.
+- **Fix:** an area with no `AreaUsage` entry should rank as least recently used (e.g. `DateTime.MinValue` instead of the
+  write time), or prefetch marks its areas as "prefetched, unused". Then pre-warmed but unflown scenery goes first. Add
+  a test for `CacheAreas.Trim` with one flown area and one pre-warmed area.
+
+### R6. Reuse the existing models (ask before building)
+
+| Need | Today in the branch | Existing model | Proposal |
+|---|---|---|---|
+| Which mip per texture | `PagingModel.MipFor` | `PagingModel` | Already reused |
+| Which DSF tiles X-Plane loads | `SceneryArea.TilesAround` (the 3×4 rule) | `SceneryLoads` only **observes** DSF opens; `PrefetchPlanner` works on catalog entries already loaded | Move the 3×4 rule (and `DsfTerrain`) next to `SceneryLoads`, so "what X-Plane will load" and "what X-Plane loaded" live together |
+| Texture order around a point | `PrefetchPlaced` | `PrefetchPlanner` (track-based) | Check whether `PrefetchPlanner.Select` can take a point instead of a track; otherwise keep it and say why |
+| On ground / takeoff roll | `GroundWatch` on the camera's motion | `AircraftPositionListener` has no on-ground or ground-speed data | Add X-Plane's ground speed and an on-ground flag to `AircraftPositionListener` / `XPlaneUdp`, and let `GroundWatch` use them. This also fixes M4 |
+
+He wrote: "If something there doesn't fit, tell me and we can extend it." Put this table in the draft PR, or in a
+comment on the issue, before reworking.
+
+### R11. Stale OFP: the catch
+
+- At mount start X-Plane is usually not running, so there is no aircraft position. A guard that only accepts the plan
+  when the aircraft is within a few km of the origin would **skip the departure prefetch every time it matters**, and
+  the native-speed first load is the main result.
+- Proposal (explain it in the PR):
+  1. At mount start: use the plan only if it is recent (`params.time_generated` within, say, 6 h). Otherwise log
+     "SimBrief: the latest flight plan is N h old; skipped".
+  2. When the first real position arrives: if it is more than a few km from the origin, cancel the departure requests
+     (H4's marking) and log the skip. The gate pre-warm already requires the aircraft to be near the departure.
+
+### R12. Numbers for the PR
+
+Log a summary at mount stop, per phase (departure, arrival, climb, alternate):
+
+- textures queued, built and already cached;
+- tiles and MB downloaded for the prefetch (the R4 counter);
+- total build time (the P1 timings);
+- **hit rate**: how many of the pre-warmed textures X-Plane later opened. This needs a set of the prefetched keys per
+  phase, checked in `TextureCatalog`'s `EntryAdded` (or the `AreaUsage.Note` path).
+
+Fly 3-5 flights of different lengths and regions with it, and put a small table in the PR description. These numbers
+also decide the default budget (R4) and whether the alternate is worth keeping (structure step 3).
 
 ## Findings at a glance
 
@@ -187,11 +285,11 @@ the existing `MipWarmer` (H1-H4).
   but say so in the setup and ini help.
 - **L5. Fully qualified type.** `System.Collections.Concurrent.ConcurrentDictionary` in `MipWarmer.cs`: add a `using`.
   The same goes for `System.Globalization` / `System.Text` in `MountSession.ReadNumber`/`WriteNumber`.
-- **L6. User-Agent.** It is `orthostreamxp` (`MountSession.cs:221`). Include the version (`OrthoStreamXP/1.2.1`) so
-  SimBrief can tell clients apart, and set the same agent on the Setup test's `HttpClient` (it uses `MeshHttp`).
-- **L7. Timeout vs OFP size.** The fetcher's JSON includes the whole OFP text (often 1-2 MB). `Timeout` = 10 s
-  (`SimBriefClient.cs:25`) covers headers **and** body (`ReadAsStringAsync`, `:52`), which may be tight on a slow
-  line. Consider 20-30 s, or `HttpCompletionOption.ResponseHeadersRead` with a separate read timeout.
+- **L6. User-Agent.** *Now a maintainer requirement (R7).* It is `orthostreamxp` (`MountSession.cs:221`). Use the same
+  `orthostreamxp/<version>` as the tile downloads (`TileSource.cs:153`) and the Setup test.
+- **L7. Timeout vs OFP size.** *Dropped.* The maintainer wants a short timeout, and the 10 s (`SimBriefClient.cs:25`)
+  never holds up the mount because the fetch runs in the background. Keep it. If a slow line ever runs out of time,
+  log it clearly ("SimBrief did not answer within 10 s") rather than raising the timeout.
 - **L8. Every texture of the arrival, alternate and climb is registered.** `PrefetchPlaced` calls
   `_streamer.Get(texture)`, which `GetOrAdd`s a `StreamedTexture` (`TextureStreamer.cs:105`) for every texture there
   (tens of thousands). They live for the session. That is probably fine; just be aware of it.
@@ -257,7 +355,9 @@ disposes.
 
 ## Before the upstream PR (checklist)
 
-- [ ] Wait for the maintainer's answer to the feature proposal (one PR, or departure first and ground pre-warm second).
+- [x] Wait for the maintainer's answer to the feature proposal. Answered: one PR with small commits, targeting
+      `develop` (see "Maintainer requirements").
+- [ ] Every item of "Maintainer requirements" (R1-R12) done, or answered in the PR description.
 - [ ] Rebase onto upstream **`develop`** (the README says PRs go to `develop`). The branch is based on `1f5fb20`,
       `develop` is 4 commits further (CI and a help text), and none of those touch the changed files.
 - [ ] Remove `review-simbrief-prefetch.md` and the fork-only `CLAUDE.md` branching change from the PR branch (upstream
