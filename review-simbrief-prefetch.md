@@ -12,6 +12,9 @@ is unchanged up to `e59478f` (later commits only touch `CLAUDE.md` and this file
 Context: a feature proposal has been posted upstream (flysimdev/OrthoStreamXP). It describes this branch as work in
 progress and asks whether to send one PR or several. This file is the to-do list until that PR.
 
+This branch stays a WIP branch and is never merged. The PR is built on a fresh branch from upstream `develop` with a
+clean commit structure (see "Branch plan").
+
 ## Overall
 
 The design is sound and fits the codebase. One OFP fetch feeds both:
@@ -48,9 +51,30 @@ streaming worse**. He is not a SimBrief user himself. Keep it off by default and
 3. The alternate, as its own commit **behind its own switch** (or left out). It is rarely flown, so it is the least
    likely to pay for its downloads.
 
-The current branch has this mixed (the alternate is part of the ground pre-warm). Reorder or squash before the PR. The
-unrelated changes (Branch scope) don't belong in this PR. He offered feedback on a **draft PR** early: open one once
-R1 and R2 are done.
+The current branch has this mixed (the alternate is part of the ground pre-warm). It is **not** reordered in place. See
+"Branch plan" below: the PR gets a fresh branch with this structure. He offered feedback on a **draft PR** early: open
+one from the fresh branch once R1 and R2 are done.
+
+### Branch plan: `feature/simbrief-prefetch` stays WIP and is never merged
+
+- **`feature/simbrief-prefetch` (this branch)** is the fork's working and experiment branch. It keeps everything: this
+  review file, the fork-only `CLAUDE.md` rule, the `-NoUpdates` / `NO_APP_UPDATES` test-RC installer switch, and the
+  other side changes. It is never merged, upstream or into the fork's `main`, and it is never rewritten for the PR.
+- **The PR branch** (e.g. `feature/simbrief-prefetch-pr`) is created fresh from **upstream `develop`**, not from this
+  branch:
+  1. `git fetch upstream develop`, then `git switch -c feature/simbrief-prefetch-pr upstream/develop`.
+  2. Rebuild the three commits of the PR structure above, taking only the SimBrief code from this branch (copy the
+     files, or `git checkout feature/simbrief-prefetch -- <paths>` per commit, then stage in parts). Don't cherry-pick
+     the WIP history: its commits mix features, fixes and side changes.
+  3. The fixes for the open requirements (R1, R2, R4, R5, R7, R9, R11, R12) and findings land in the commit they
+     belong to, not as "fix review" commits on top.
+  4. Before each commit: build with `TreatWarningsAsErrors` and run the tests for that step. Every commit should
+     build on its own.
+- **Never in the PR branch:** `review-simbrief-prefetch.md`, the `CLAUDE.md` change, the installer switch
+  (`build-installer.ps1`, `OrthoStreamXP.csproj`, `AppUpdates.cs`), the paging-k memory and the first-listing log
+  line (Branch scope). They stay on this branch, or go upstream as their own PRs if wanted.
+- Keep developing on this branch while the PR is open. Port the changes to the PR branch deliberately, then rebase the
+  PR branch onto `develop` whenever `develop` moves.
 
 ### Requirements and their status in the code
 
@@ -352,7 +376,7 @@ also decide the default budget (R4) and whether the alternate is worth keeping (
 
 ## Branch scope
 
-These changes are unrelated to SimBrief and should be separate PRs, or at least be called out in the PR description:
+These changes are unrelated to SimBrief. They stay on this WIP branch and are left out of the PR branch (or go upstream as their own PRs):
 
 - Remembering the paging model's k across starts (`PagingModel.Remember`, `MountSession.ReadNumber`/`WriteNumber`). The
   static file I/O inside `MountSession` also goes against the "one class, one responsibility" guideline: move it into a
@@ -370,12 +394,13 @@ disposes.
 - [x] Wait for the maintainer's answer to the feature proposal. Answered: one PR with small commits, targeting
       `develop` (see "Maintainer requirements").
 - [ ] Every item of "Maintainer requirements" (R1-R12) done, or answered in the PR description.
-- [ ] Rebase onto upstream **`develop`** (the README says PRs go to `develop`). The branch is based on `1f5fb20`,
-      `develop` is 4 commits further (CI and a help text), and none of those touch the changed files.
-- [ ] Remove `review-simbrief-prefetch.md` and the fork-only `CLAUDE.md` branching change from the PR branch (upstream
-      still has "Don't commit anything to the repo").
+- [ ] Create the fresh PR branch from upstream **`develop`** (the README says PRs go to `develop`), as in "Branch plan".
+      This WIP branch is based on `1f5fb20`; `develop` was 4 commits further on 2026-11-11 (CI and a help text), and
+      none of those touch the changed files.
+- [ ] Rebuild the history as the three commits of "PR structure", each building and tested on its own.
+- [ ] Check the PR branch's diff against `develop`: no `review-simbrief-prefetch.md`, no `CLAUDE.md` change, no
+      installer switch, no Branch scope side changes.
 - [ ] Fix H1, H4 and H5 at least. Measure H2 and H3 in a flight log, and fix them if they show.
-- [ ] Split out or call out the unrelated changes (Branch scope).
 - [ ] D1-D4: help texts, user guide page and release-notes entry.
 - [ ] Build with `TreatWarningsAsErrors` and run the full test suite on Windows, including `MountSmokeTests` with WinFsp.
       Note the results in the PR.
