@@ -347,22 +347,32 @@ internal sealed class MipWarmer : IDisposable
                 Remove(request);
                 continue;
             }
-            // A base step keeps the request: its level follows once the base tile is in.
+            // A base step keeps the request: its level follows once the base tile is in. If the base tile fails (a
+            // provider gap, the sea, a 404), so would the level: the request goes, instead of being ranked and tried
+            // again every pass for the rest of the session.
             bool baseStep = request.Mip is int final && final < t.Mip;
             if (!baseStep) Remove(request);
+            if (build.IsCompleted)
+            {
+                // Nothing started: it was there already, or it failed within the retry time.
+                if (baseStep && !Succeeded(build)) Remove(request);
+                continue;
+            }
             Interlocked.Increment(ref _queued);
-            if (build.IsCompleted) continue;
             if (baseStep) _stepping[request.Texture.Key] = 0;
             Interlocked.Increment(ref _running[(int)kind]);
             string key = request.Texture.Key;
-            build.ContinueWith(_ =>
+            build.ContinueWith(done =>
             {
+                if (baseStep && !Succeeded(done)) Remove(request);
                 Interlocked.Decrement(ref _running[(int)kind]);
                 _stepping.TryRemove(key, out byte _);
                 Wake();
             }, TaskScheduler.Default);
         }
     }
+
+    private static bool Succeeded(Task<bool> build) => build.IsCompletedSuccessfully && build.Result;
 
     private bool Full(BuildKind kind) => Volatile.Read(ref _running[(int)kind]) >= kind switch
     {

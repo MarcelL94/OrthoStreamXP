@@ -1,3 +1,4 @@
+using System.Net;
 using OrthoStreamXP.Scenery;
 using OrthoStreamXP.Textures;
 
@@ -29,9 +30,9 @@ public sealed class StreamingTests : IDisposable
 
     /// <param name="level">-3: ZL16 textures are 1024 px from zoom 14, their base level 2 (zoom 12). -2: 2048 px from zoom 15, base level 3.</param>
     private Setup Streaming(int level = -3, double maxWait = 0.2, Func<int, TimeSpan>? delay = null, Setup? sharing = null, int detailedBuilds = 16,
-        long buildTiles = TextureStreamer.DefaultBuildTiles, Func<Uri, Task?>? hold = null)
+        long buildTiles = TextureStreamer.DefaultBuildTiles, Func<Uri, Task?>? hold = null, Func<int, HttpStatusCode>? status = null)
     {
-        FakeTileServer server = sharing?.Server ?? new FakeTileServer(delay: delay, hold: hold);
+        FakeTileServer server = sharing?.Server ?? new FakeTileServer(status: status, delay: delay, hold: hold);
         TileSource tiles = sharing?.Tiles ?? Track(new TileSource("test", FakeTileServer.Template, 32, handler: server) { Store = new TileStore(_tree.PathOf("base")) });
         var plan = new TexturePlan(level, TextureSizing.MaxSize);
         var roots = new SceneryRoots(_tree.PathOf("source"), _tree.PathOf("cache"), null, plan);
@@ -596,6 +597,26 @@ public sealed class StreamingTests : IDisposable
         Assert.Equal(FetchPriority.NearWarm, request.Priority);
         Assert.Equal(0, warmer.CancelGround());
         Assert.NotNull(warmer.WaitingFor(Texture()));
+    }
+
+    [Fact]
+    public async Task A_texture_whose_base_tile_fails_leaves_the_queue_and_counts_one_build()
+    {
+        // M3: the base step kept its request whatever happened, so a texture without imagery was tried every pass all
+        // session, and each try counted as a build started.
+        Setup s = Streaming(status: zoom => zoom == 12 ? HttpStatusCode.InternalServerError : HttpStatusCode.OK);
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+
+        warmer.Prefetch([Texture()]);
+        await Until(() =>
+        {
+            warmer.StartWhatFits();
+            return warmer.WaitingFor(Texture()) is null;
+        });
+        for (int pass = 0; pass < 5; pass++) warmer.StartWhatFits(); // within the retry time: nothing more
+
+        Assert.Equal(1, warmer.Queued);
+        Assert.DoesNotContain(14, Zooms(s.Server)); // the level was never tried without its base
     }
 
     [Fact]

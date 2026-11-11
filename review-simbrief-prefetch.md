@@ -58,7 +58,9 @@ Never claim a test passed without running it.
        log the skip), plus the rest of T2 and the `time_generated` part of T5.
 5. [x] **M2**: track the ground pre-warm task, await it in `StopAsync`, log unexpected exceptions, plus T4.
        L1 (the duplicate "rolling" line) is fixed with it.
-6. [ ] **M3**: drop a failing base step after N attempts, count only real build starts, plus T3.
+6. [x] **M3**: drop a failing base step after N attempts, count only real build starts, plus T3.
+       N = 1: the request goes when its base build fails (or is still in its 15 s retry wait). Load-ahead's own
+       requests come back with the next move anyway.
 7. [ ] **F3**: give the memory back once the ground queue is empty (ask how first, see "Stop and ask").
 8. [ ] **R7**: one shared `orthostreamxp/<version>` User-Agent for the tile downloads, the Setup test and SimBrief.
 9. [ ] **R8 test**: problems a `SimBriefAnswer` carries never contain the username or Pilot ID.
