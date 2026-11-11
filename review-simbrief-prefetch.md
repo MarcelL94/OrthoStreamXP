@@ -16,6 +16,64 @@ progress and asks whether to send one PR or several. This file is the to-do list
 This branch stays a WIP branch and is never merged. The PR is built on a fresh branch from upstream `develop` with a
 clean commit structure (see "Branch plan").
 
+## Status (2026-11-11, evening)
+
+| | |
+|---|---|
+| Branch | `feature/simbrief-prefetch`, local commits up to `94dcc49`, **not pushed** |
+| Work order | Step 0 and Step 1 done except **16 (M4)**, deferred until the maintainer answers R6 |
+| Code review | `/simplify` pass (reuse, simplification, efficiency, altitude) applied in `94dcc49`; skipped items listed in that commit |
+| Build and tests | `dotnet build OrthoStreamXP.slnx`: 0 warnings. `dotnet test`: **428 passed**, 0 failed, 0 skipped (`MountSmokeTests` ran with WinFsp) |
+| Test installer | **RC 9** (`1.3.0-rc.9`, updates compiled out), built from `94dcc49`: `artifacts\releases\OrthoStreamXP-Setup.msi`. Not installed yet |
+| Real flight | Last one: EDDV → ENGM on RC 8 (before any Step 1 change). RC 9 is not flown yet |
+| PR | Not started. The fresh PR branch from upstream `develop` waits for the user's go (see "Stop and ask") |
+
+### Requirements at a glance
+
+| ID | State |
+|---|---|
+| R1 not worse | H1 fixed; H2/H3 measured-but-fine on RC 8, now logged for a cold or slow run |
+| R2 departure at Warm | Done |
+| R3 pre-warm at Background or below | Done |
+| R4 download budget | Done: `simbrief-max-mb`, 1000 MB |
+| R5 eviction | Done: unflown areas trimmed first |
+| R6 reuse existing models | **Open**: ask the maintainer (table in R6) |
+| R7 User-Agent | Done: `orthostreamxp/<version>` everywhere |
+| R8 no username in logs | Done, tested, scrubbed |
+| R9 fetch once + explicit re-fetch | Done: "Reload SimBrief flight plan" on Home |
+| R10 short timeout | Done |
+| R11 stale OFP | Done: 6 h age at start, 50 km on the first position |
+| R12 numbers for the PR | Logging done; **3-5 flights to fly** |
+
+### What to check on the RC 9 flight
+
+Install RC 9 (answer **No** to "delete settings, logs and history?" or re-seed `paging-screen-k.txt`), then fly with
+SimBrief on. In the log:
+
+- **Departure:** `SimBrief: <ICAO> - N textures ... queued`, and the first streaming summary still 100 % real, 0 waits.
+- **Ground pre-warm:** the arrival and climb lines; no alternate line unless `simbrief-alternate = on`
+  (`... is left out (simbrief-alternate = off)`).
+- **H2:** `Load-ahead: N textures waiting; the last pass took X ms, the longest ... ms` every 100 passes while parked.
+  Reopen H2 above ~50 ms.
+- **F3:** `Ground pre-warm: everything is built; unused build memory given back (working set A -> B, N ms)`, then the
+  2-min load lines should stay near B until takeoff. Note the pause (N ms).
+- **H3:** at the roll, `Load-ahead at the takeoff roll: N detailed, N small and N base builds running, M of them the
+  ground pre-warm's`, then `Ground pre-warm: the aircraft is rolling ...` once.
+- **R4:** `SimBrief prefetch: the download budget ... is used up` only if the prefetch passes 1000 MB.
+- **R12:** at stop, one `SimBrief prefetch, <phase>: ...` line per phase (queued, builds, tiles and MB, build time,
+  `X-Plane loaded N of the M queued (P %)`). Put these in the R12 table.
+- **Reload button (not tried in the window yet):** generate a new OFP after starting, press **Reload SimBrief flight
+  plan** on Home: the text next to it, and `SimBrief: new flight plan ...` in the log. Press it again: "Unchanged".
+- **Wording:** the Home switch "Build my SimBrief flight's scenery ahead", its tooltip, and the Setup step's text.
+
+### Still open
+
+- R6 table to the maintainer (draft PR or issue comment), then M4 if he agrees.
+- R12: 3-5 flights of different lengths and regions; their numbers decide the 1000 MB default and the alternate.
+- The PR branch (Branch plan), when the user says so.
+- Not covered on purpose: the whole-texture fallback without mip streaming has no budget and no takeoff drop.
+- The PDF user guide needs a rebuild (pandoc) once the docs are final.
+
 ## Start here: instructions for the coding session
 
 You were pointed at this file, so it is your work plan. Work through the steps in order, on the branch
@@ -611,15 +669,18 @@ disposes.
 
 - [x] Wait for the maintainer's answer to the feature proposal. Answered: one PR with small commits, targeting
       `develop` (see "Maintainer requirements").
-- [ ] Every item of "Maintainer requirements" (R1-R12) done, or answered in the PR description.
+- [ ] Every item of "Maintainer requirements" (R1-R12) done, or answered in the PR description. All but R6 (ask)
+      and the R12 flights; see "Status".
 - [ ] Create the fresh PR branch from upstream **`develop`** (the README says PRs go to `develop`), as in "Branch plan".
       This WIP branch is based on `1f5fb20`; `develop` was 4 commits further on 2026-11-11 (CI and a help text), and
       none of those touch the changed files.
 - [ ] Rebuild the history as the three commits of "PR structure", each building and tested on its own.
 - [ ] Check the PR branch's diff against `develop`: no `review-simbrief-prefetch.md`, no `CLAUDE.md` change, no
       installer switch, no Branch scope side changes.
-- [ ] Fix H1, H4 and H5 at least. Measure H2 and H3 in a flight log, and fix them if they show.
-- [ ] D1-D4: help texts, user guide page and release-notes entry.
+- [x] Fix H1, H4 and H5 at least. Measure H2 and H3 in a flight log, and fix them if they show.
+      H1, H4, H5 fixed. H2/H3 not seen on RC 8; logged from RC 9 on.
+- [x] D1-D4: help texts, user guide page and release-notes entry. (Release-notes text drafted under "Docs and UX
+      consistency"; the file is named when the version is known.)
 - [ ] Build with `TreatWarningsAsErrors` and run the full test suite on Windows, including `MountSmokeTests` with WinFsp.
       Note the results in the PR.
 - [ ] In the PR description, include the numbers from the test flights (native-speed first load, ~98 % of the arrival
