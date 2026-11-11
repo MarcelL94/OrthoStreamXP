@@ -66,6 +66,43 @@ public sealed class SimBriefPrefetchTests : IDisposable
         Assert.Matches(@"^orthostreamxp/\d+\.\d+", HttpIdentity.UserAgent);
     }
 
+    private sealed class ThrowingHandler(Exception ex) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromException<HttpResponseMessage>(ex);
+    }
+
+    [Theory]
+    [InlineData("SecretPilot")]
+    [InlineData("987654")] // a Pilot ID
+    public async Task No_problem_SimBrief_answers_with_holds_the_username_or_Pilot_ID(string user)
+    {
+        // R8: the problem is logged and shown; the user is never in it, whatever the server or the network said.
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        string url = SimBriefClient.UrlFor(user).AbsoluteUri;
+        var answers = new List<SimBriefAnswer>();
+        foreach (HttpMessageHandler handler in new HttpMessageHandler[]
+        {
+            new StubHandler(HttpStatusCode.BadRequest, $$$"""{"fetch":{"status":"Error: Unknown UserID {{{user}}}"}}"""),
+            new StubHandler(HttpStatusCode.OK, $$$"""{"fetch":{"status":"Error: no flight plan for {{{user.ToUpperInvariant()}}}"}}"""),
+            new StubHandler(HttpStatusCode.InternalServerError, user),
+            new StubHandler(HttpStatusCode.OK, $"<html>{user}</html>"),
+            new StubHandler(HttpStatusCode.OK, """{"fetch":{"status":"Success"}}"""),
+            new ThrowingHandler(new HttpRequestException($"Connection refused ({url})")),
+        })
+        {
+            using (handler)
+            using (var http = new HttpClient(handler))
+                answers.Add(await new SimBriefClient(http).FetchAsync(user, ct));
+        }
+
+        Assert.All(answers, a =>
+        {
+            Assert.NotNull(a.Problem);
+            Assert.DoesNotContain(user, a.Problem, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
     [Fact]
     public void A_number_is_the_pilot_id_anything_else_the_username()
     {

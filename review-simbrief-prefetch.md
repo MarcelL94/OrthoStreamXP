@@ -65,7 +65,8 @@ Never claim a test passed without running it.
 8. [x] **R7**: one shared `orthostreamxp/<version>` User-Agent for the tile downloads, the Setup test and SimBrief.
        `HttpIdentity.UserAgent`, the app's version. Note: the tile downloads and the connection test sent a fixed
        `orthostreamxp/0.2` before; they now send the real version (as the mesh downloads already did).
-9. [ ] **R8 test**: problems a `SimBriefAnswer` carries never contain the username or Pilot ID.
+9. [x] **R8 test**: problems a `SimBriefAnswer` carries never contain the username or Pilot ID.
+       Plus a scrub in `FetchAsync`: SimBrief's own error text or an exception's message could have echoed it.
 10. [ ] **R12 + measurement logging**: the per-phase summary at mount stop (queued, built, cached, tiles and MB, build
         time, hit rate), plus the H2/H3 measurements from "What to log" (F8: today the prefetch's share of the 7.8 GB
         is unknown). Needed before step 11 can be decided.
@@ -240,7 +241,7 @@ one from the fresh branch once R1 and R2 are done.
 | R5 | Pre-warm must not evict what was just built | Partly; **open** for a related issue | See below |
 | R6 | Reuse the existing models | **Open**, ask him | See below |
 | R7 | User-Agent `orthostreamxp/<version>` like the tile downloads | Done (L6) | One shared constant for the tile downloads, the Setup test and SimBrief |
-| R8 | Never log the username or Pilot ID | Done (checked) | No log line contains it, and the URL with `?username=` is never logged. Add a test that the problems `SimBriefAnswer` can carry never contain the user |
+| R8 | Never log the username or Pilot ID | Done (tested) | No log line contains it, and the URL with `?username=` is never logged. Add a test that the problems `SimBriefAnswer` can carry never contain the user |
 | R9 | Fetch once per mount, plus an explicit re-fetch, no polling | Done for once per mount; **button open** (M1) | Clarified: "explicit" means a **button the user presses whenever they want**. No automatic re-fetch (not even when parked) and no polling. See M1 |
 | R10 | Short timeout, a slow SimBrief never holds up the mount | Done | 10 s, and the fetch runs in the background (L7 dropped) |
 | R11 | Stale OFP guard: near the origin and/or recent, otherwise log the skip | Done (H5) | `FlightPlan.MaxAge` (6 h, from `params.time_generated`) at mount start; the first real position > 50 km from the origin drops the departure requests (`GroundPrewarm.DropDepartureIfElsewhere`). Both log the skip |

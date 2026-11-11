@@ -40,8 +40,20 @@ internal sealed class SimBriefClient(HttpClient http)
         return answer.Plan;
     }
 
-    /// <summary>Asks SimBrief for the user's latest flight plan.</summary>
+    /// <summary>
+    /// Asks SimBrief for the user's latest flight plan. The problem it answers with is logged and shown: it never holds
+    /// the username or Pilot ID, even when SimBrief's text or an exception's message would (the URL carries it).
+    /// </summary>
     public async Task<SimBriefAnswer> FetchAsync(string user, CancellationToken ct)
+    {
+        SimBriefAnswer answer = await AskAsync(user, ct).ConfigureAwait(false);
+        string trimmed = user.Trim();
+        return answer.Problem is { } problem && trimmed.Length > 0 && problem.Contains(trimmed, StringComparison.OrdinalIgnoreCase)
+            ? answer with { Problem = problem.Replace(trimmed, "(your SimBrief user)", StringComparison.OrdinalIgnoreCase) }
+            : answer;
+    }
+
+    private async Task<SimBriefAnswer> AskAsync(string user, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(user)) return SimBriefAnswer.Failed("no SimBrief username or Pilot ID is set");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
