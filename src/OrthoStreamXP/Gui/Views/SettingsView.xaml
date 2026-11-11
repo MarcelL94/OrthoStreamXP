@@ -135,7 +135,7 @@
                                 <StackPanel VerticalAlignment="Center" Margin="0,0,24,0">
                                     <TextBlock Text="Ground detail" />
                                     <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
-                                               Text="X-Plane can sprinkle procedural grass, shrubs and dirt over the ground when you are low. That livens up its own blurry textures, but on sharp aerial photos it looks like noise, so it is off by default. Raise it if you like some extra texture up close: 100 % is X-Plane's full effect. Your scenery packages are not changed." />
+                                               Text="Adds a grass and dirt pattern on top of the photos, seen when you are on the ground or flying low. At 0 % (the default) the ground looks exactly like the photos: clean and sharp. Higher values give the ground more texture up close, but make the photos look grainier. Try it if the ground looks too flat to you during taxi or landing." />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                     <Slider Width="200" Minimum="0" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="True" VerticalAlignment="Center"
