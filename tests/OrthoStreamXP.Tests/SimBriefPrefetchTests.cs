@@ -340,6 +340,26 @@ public sealed class SimBriefPrefetchTests : IDisposable
     }
 
     [Fact]
+    public async Task A_new_plan_from_a_reload_starts_the_download_limit_again_and_the_same_plan_does_not()
+    {
+        // A turnaround: the first flight spent the whole limit, then the pilot plans the way back and reloads.
+        var budget = new PrefetchBudget(100);
+        SimBriefAnswer[] answers = [Answer(Eddm, Egll, "1"), Answer(Eddm, Egll, "1"), Answer(Egll, Eddm, "2")];
+        int fetches = 0;
+        var session = new SimBriefSession(_ => Task.FromResult(answers[Math.Min(fetches++, answers.Length - 1)]), [], [], () => null,
+            radiusKm: 10, Clock, budget: budget);
+        await session.FirstPlan;
+        budget.Spend(100);
+
+        await session.ReloadAsync(); // unchanged: still spent
+        Assert.True(budget.Exhausted);
+
+        Assert.StartsWith("Loaded EGLL → EDDM", await session.ReloadAsync(), StringComparison.Ordinal);
+        Assert.Equal(0, budget.SpentBytes);
+        Assert.Equal(1, budget.Round);
+    }
+
+    [Fact]
     public async Task Two_presses_during_one_reload_send_one_request()
     {
         var held = new TaskCompletionSource<SimBriefAnswer>(TaskCreationOptions.RunContinuationsAsynchronously);

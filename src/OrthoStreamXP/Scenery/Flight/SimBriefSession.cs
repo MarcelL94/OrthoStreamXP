@@ -1,3 +1,5 @@
+using OrthoStreamXP.Setup;
+
 namespace OrthoStreamXP.Scenery;
 
 /// <summary>
@@ -11,6 +13,7 @@ internal sealed class SimBriefSession
     private readonly Func<CancellationToken, Task<SimBriefAnswer>> _fetch;
     private readonly DeparturePrefetch _departure;
     private readonly CancellationToken _stop;
+    private readonly PrefetchBudget? _budget;
     private readonly TimeProvider _clock;
     private readonly Lock _gate = new();
     private readonly List<Task> _work = [];
@@ -23,11 +26,14 @@ internal sealed class SimBriefSession
     /// <param name="aircraft">Where the aircraft is now, when X-Plane has sent a position.</param>
     /// <param name="run">Runs the ground pre-warm's queuing (tests run it inline).</param>
     /// <param name="alternate">The ground pre-warm builds the alternate too (<c>simbrief-alternate</c>).</param>
+    /// <param name="budget">The download limit (<c>simbrief-max-mb</c>); a reloaded new plan starts it again. Null: no limit.</param>
     public SimBriefSession(Func<CancellationToken, Task<SimBriefAnswer>> fetch, IReadOnlyList<DepartureTarget> departureTargets,
         IReadOnlyList<GroundTarget> groundTargets, Func<(double Lat, double Lon)?> aircraft, double radiusKm,
-        TimeProvider? clock = null, Func<Action, Task>? run = null, bool alternate = false, CancellationToken stop = default)
+        TimeProvider? clock = null, Func<Action, Task>? run = null, bool alternate = false, PrefetchBudget? budget = null,
+        CancellationToken stop = default)
     {
         _fetch = fetch;
+        _budget = budget;
         _clock = clock ?? TimeProvider.System;
         _departure = new DeparturePrefetch(aircraft, departureTargets, radiusKm, _clock);
         _stop = stop;
@@ -137,9 +143,11 @@ internal sealed class SimBriefSession
             bool buildDeparture = moved || old!.StaleAt(_clock.GetUtcNow());
             int ground = Ground?.DropGround() ?? 0;
             int departure = moved ? Ground?.DropDeparture() ?? 0 : 0;
+            _budget?.Restart(); // a turnaround: the new flight gets the whole limit, whatever the last one spent
             Ground?.UsePlan(plan);
             Log.Info($"SimBrief: new flight plan {flight}{Age(plan)}; the old one's textures still waiting were dropped " +
-                     $"({ground} of the ground pre-warm{(moved ? $", {departure} of the departure" : "")})");
+                     $"({ground} of the ground pre-warm{(moved ? $", {departure} of the departure" : "")})" +
+                     (_budget is null ? "" : $"; the download limit of {CacheInventory.FormatBytes(_budget.LimitBytes)} starts again"));
             if (buildDeparture) await PrefetchDepartureAsync(Task.FromResult<FlightPlan?>(plan)).ConfigureAwait(false);
             return $"Loaded {flight}{Age(plan)}." + (buildDeparture ? " Its departure is being built." : "");
         }

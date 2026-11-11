@@ -70,8 +70,8 @@ internal sealed class MipWarmer : IDisposable
     /// <summary>The ground pre-warm's builds running now (for the takeoff roll's log line, H3).</summary>
     private int _groundRunning;
     private PrefetchBudget? _budget;
-    /// <summary>The budget ran out and this package's SimBrief requests were dropped (once).</summary>
-    private bool _budgetSpent;
+    /// <summary>The budget's round (<see cref="PrefetchBudget.Round"/>) in which this package's SimBrief requests were dropped; -1: none yet.</summary>
+    private int _budgetSpentRound = -1;
     /// <summary>Passes of <see cref="StartWhatFits"/> and their longest time since the last log (H2).</summary>
     private int _passes;
     private TimeSpan _longestPass;
@@ -459,8 +459,8 @@ internal sealed class MipWarmer : IDisposable
     /// <summary>Once the download budget is spent: the SimBrief requests still waiting go, and that is logged once.</summary>
     private void DropPrefetchOverBudget()
     {
-        if (_budgetSpent || _budget is not { Exhausted: true } budget) return;
-        _budgetSpent = true;
+        if (_budget is not { Exhausted: true } budget || _budgetSpentRound == budget.Round) return;
+        _budgetSpentRound = budget.Round;
         int dropped = Drop(static r => r.Meter is not null);
         if (dropped > 0) _groundPending = false; // not all built: nothing to give back for
         if (budget.FirstToReport())

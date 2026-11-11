@@ -222,9 +222,10 @@ internal sealed class MountSession : IDisposable
         _simBrief = new HttpClient();
         var client = new SimBriefClient(_simBrief);
         AircraftPositionListener? listener = _listener;
+        PrefetchBudget? budget = null;
         if (_settings.SimBriefMaxMb > 0)
         {
-            var budget = new PrefetchBudget(_settings.SimBriefMaxMb * 1024L * 1024);
+            budget = new PrefetchBudget(_settings.SimBriefMaxMb * 1024L * 1024);
             foreach (PackageMount mount in _mounts) mount.Warmer?.UseBudget(budget);
         }
         // The ground pre-warm needs X-Plane's positions.
@@ -235,7 +236,7 @@ internal sealed class MountSession : IDisposable
         if (ground.Length > 0) PrewarmMemory.Watch([.. _mounts.Select(m => m.Warmer).OfType<MipWarmer>()]);
         var simBrief = new SimBriefSession(ct => client.FetchAsync(user, ct), targets, ground,
             () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, _settings.SimBriefRadiusKm,
-            alternate: _settings.SimBriefAlternate, stop: _summaries.Token);
+            alternate: _settings.SimBriefAlternate, stop: _summaries.Token, budget: budget);
         _simBriefSession = simBrief;
         simBrief.Start();
     }

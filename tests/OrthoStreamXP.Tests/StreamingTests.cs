@@ -615,6 +615,10 @@ public sealed class StreamingTests : IDisposable
         });
         await Task.Delay(100, TestContext.Current.CancellationToken);
         Assert.Equal(spent, budget.SpentBytes); // load-ahead never counts
+
+        budget.Restart(); // a reloaded new flight plan (a turnaround): the prefetch may queue again
+        Assert.False(budget.Exhausted);
+        Assert.NotEqual((0, 0), warmer.PrefetchGround([second], Far, GroundPrewarm.Arrival));
     }
 
     [Fact]
