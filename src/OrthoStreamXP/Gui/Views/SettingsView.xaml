@@ -523,6 +523,9 @@
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Succeeded}" Value="True">
+                                                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}" />
+                                                    </DataTrigger>
                                                     <DataTrigger Binding="{Binding Failed}" Value="True">
                                                         <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
                                                     </DataTrigger>

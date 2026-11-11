@@ -14,6 +14,7 @@ internal sealed class SimBriefTestViewModel : ObservableObject
     private bool _isRunning;
     private string? _status;
     private bool _failed;
+    private bool _succeeded;
 
     /// <param name="user">The username or Pilot ID entered now.</param>
     public SimBriefTestViewModel(HttpClient http, Func<string?> user)
@@ -52,11 +53,19 @@ internal sealed class SimBriefTestViewModel : ObservableObject
         private set => Set(ref _failed, value);
     }
 
+    /// <summary>The last test found a flight plan (shown in green).</summary>
+    public bool Succeeded
+    {
+        get => _succeeded;
+        private set => Set(ref _succeeded, value);
+    }
+
     /// <summary>The username changed: the last result no longer applies.</summary>
     public void Reset()
     {
         Status = null;
         Failed = false;
+        Succeeded = false;
         RelayCommand.Refresh();
     }
 
@@ -65,10 +74,12 @@ internal sealed class SimBriefTestViewModel : ObservableObject
         IsRunning = true;
         Status = "Asking SimBrief for your latest flight plan…";
         Failed = false;
+        Succeeded = false;
         try
         {
             SimBriefAnswer answer = await _client.FetchAsync(_user() ?? "", CancellationToken.None).ConfigureAwait(true);
             Failed = answer.Origin is null;
+            Succeeded = !Failed;
             Status = Describe(answer);
         }
 #pragma warning disable CA1031 // The click's task is not awaited: an unexpected failure must show and be logged, not vanish.
@@ -88,7 +99,6 @@ internal sealed class SimBriefTestViewModel : ObservableObject
     internal static string Describe(SimBriefAnswer answer)
     {
         if (answer.Plan is not { } plan) return answer.NoPlan;
-        string from = plan.Origin.Icao.Length > 0 ? plan.Origin.Icao : "your departure";
-        return $"Connected. Your latest flight plan is {plan.Describe()}: its textures around {from} will be built when streaming starts.";
+        return $"Connected. Your latest flight plan is {plan.Describe()}.";
     }
 }
