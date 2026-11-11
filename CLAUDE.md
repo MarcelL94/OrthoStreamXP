@@ -24,7 +24,9 @@ dotnet test --solution OrthoStreamXP.slnx --filter-method "*Name*"   # single te
 
 ## Branching
 
-Don't commit anything to the repo
+- Never commit or push to `main`, not even small fixes. Changes reach `main` only through a pull request.
+- Work on a feature branch (`feature/<name>`). If the current branch is `main`, create a feature branch before the first commit.
+- Commits and pushes on feature branches are allowed.
 
 ## Architecture
 
