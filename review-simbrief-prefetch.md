@@ -15,6 +15,68 @@ progress and asks whether to send one PR or several. This file is the to-do list
 This branch stays a WIP branch and is never merged. The PR is built on a fresh branch from upstream `develop` with a
 clean commit structure (see "Branch plan").
 
+## Start here: instructions for the coding session
+
+You were pointed at this file, so it is your work plan. Work through the steps in order, on the branch
+`feature/simbrief-prefetch`. Follow `CLAUDE.md`: never commit to `main`, and use its workflow, build and test commands.
+Tick the boxes in this file as you go, and commit this file together with the work it describes.
+
+### Step 0: merge the EDDV → ENGM flight findings into this file (do this first)
+
+This session has findings from a complete real flight, EDDV (Hannover) → ENGM (Oslo), that are not in this file yet.
+Merge them before writing any code:
+
+- [ ] Add a section **"Real flight EDDV → ENGM"** right after this one. Include the route, date, the settings that
+      matter (mip streaming, `level-change`, providers, cache state at start), and each observation with its log
+      evidence (timestamps, the log lines, numbers).
+- [ ] Give each finding an ID **F1, F2, ...** In the same section, map each one: "confirms H2", "new", "contradicts
+      H3", and so on. Where a flight finding confirms, refutes or re-ranks an existing item (H*, M*, L*, R*), update that
+      item in place. Change its severity, replace "verify" with the measured result, and add a line "Seen in flight:
+      F<n>".
+- [ ] Add the new F items to "Findings at a glance".
+- [ ] Insert each F item into the Step 1 work order where its severity belongs. Anything that hurt real X-Plane reads
+      in the flight comes before everything else (R1: "must not make the existing streaming worse").
+- [ ] Answer from the flight data what "What to log in the next test flight" asks, where it can be answered. Mark
+      what is still unknown.
+- [ ] Commit only this file ("Review notes: merge the EDDV-ENGM flight findings"). Then continue with Step 1 without
+      waiting.
+
+### Step 1: implement, in this order
+
+One item per commit (code + tests + the ticked box here). Before each commit, run `dotnet build OrthoStreamXP.slnx`
+and the relevant tests, and say in the commit message what ran. If the build or tests fail, fix them before moving on.
+Never claim a test passed without running it.
+
+1. [ ] **H1 / R1**: ground requests must not block load-ahead (`AddOrOutrank`), plus test T1.
+2. [ ] **R2**: departure prefetch capped at `FetchPriority.Warm` (no `NearWarm`).
+3. [ ] **H4**: mark departure requests and drop them on the takeoff roll, plus part of test T2.
+4. [ ] **R11 / H5**: stale-OFP guard (`params.time_generated` at mount start, cancel on the first far-away position,
+       log the skip), plus the rest of T2 and the `time_generated` part of T5.
+5. [ ] **M2**: track the ground pre-warm task, await it in `StopAsync`, log unexpected exceptions, plus T4.
+6. [ ] **M3**: drop a failing base step after N attempts, count only real build starts, plus T3.
+7. [ ] **R7**: one shared `orthostreamxp/<version>` User-Agent for the tile downloads, the Setup test and SimBrief.
+8. [ ] **R8 test**: problems a `SimBriefAnswer` carries never contain the username or Pilot ID.
+9. [ ] **R12 + measurement logging**: the per-phase summary at mount stop (queued, built, cached, tiles and MB, build
+       time, hit rate), plus the H2/H3 measurements from "What to log". Needed before step 10 can be decided.
+10. [ ] **H2 / H3**: fix them only if the flight data (Step 0) or the new logging shows them. Otherwise leave them as
+        measured-but-fine and note that here.
+11. [ ] **R4**: the per-session download budget for the prefetch (setting, counter in the downloader, log when used up).
+12. [ ] **R5**: unflown areas rank as least recently used in `CacheAreas.Trim`, plus a test.
+13. [ ] **M1 / R9**: the "Reload SimBrief flight plan" button on Home (button only, no automatic fetch), plus its tests.
+14. [ ] **Alternate behind its own switch** (default off), as the maintainer asked (PR structure step 3).
+15. [ ] **M4**: if the flight showed it, or if R6 is agreed, use real ground speed or on-ground data instead of the
+        camera's motion.
+16. [ ] **Minor items** L1-L5, L8-L12 where cheap.
+17. [ ] **D1-D4**: help texts, the Home switch wording, the docs page and the release-notes entry.
+
+### Stop and ask the user (don't decide alone)
+
+- **R6** (reuse `SceneryLoads` / `AircraftPositionListener` instead of the new code): the maintainer must agree
+  first. Prepare the table for him; don't rework.
+- Adding a NuGet dependency, changing a public API or a settings name, or any broad refactor.
+- Anything on `main`. Creating the PR branch (that is after Step 1, see "Branch plan").
+- A flight finding that suggests changing the design itself (e.g. dropping the climb pre-warm).
+
 ## Overall
 
 The design is sound and fits the codebase. One OFP fetch feeds both:
