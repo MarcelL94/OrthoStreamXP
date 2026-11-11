@@ -511,6 +511,38 @@ public sealed class StreamingTests : IDisposable
     }
 
     [Fact]
+    public async Task The_end_of_the_ground_prewarm_is_told_once_it_is_all_built_but_not_after_a_takeoff_cancel()
+    {
+        // F3: the build buffers are given back while the aircraft still stands at the gate.
+        Setup s = Streaming();
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+        int done = 0;
+        warmer.GroundDone += () => done++;
+        (double, double) Far(double lat, double lon) => (500_000, 0); // a base tile only
+        StreamedTexture arrival = s.Streamer.Get(Texture("21904_36144_BI16"))!;
+
+        warmer.CheckGroundDone();
+        Assert.Equal(0, done); // nothing queued yet
+
+        Assert.Equal((1, 0), warmer.PrefetchGround([Texture("21904_36144_BI16")], Far, GroundPrewarm.Arrival));
+        await Until(() =>
+        {
+            warmer.StartWhatFits();
+            warmer.CheckGroundDone();
+            return done > 0;
+        });
+        Assert.True(s.Streamer.RealFrom(arrival) <= arrival.BaseMip);
+        warmer.CheckGroundDone();
+        Assert.Equal(1, done); // once
+
+        // Dropped on the takeoff roll: the aircraft moves, no compaction then.
+        warmer.PrefetchGround([Texture("21824_35824_BI16")], Far, GroundPrewarm.Route);
+        Assert.Equal(1, warmer.CancelGround());
+        warmer.CheckGroundDone();
+        Assert.Equal(1, done);
+    }
+
+    [Fact]
     public void The_takeoff_roll_drops_only_the_departures_requests_still_waiting()
     {
         Setup s = Streaming();

@@ -69,6 +69,8 @@ internal sealed class MipWarmer : IDisposable
     /// <summary>Builds running, by <see cref="BuildKind"/>.</summary>
     private readonly int[] _running = new int[3];
     private int _queued, _alreadyHad;
+    /// <summary>The ground pre-warm queued textures that have not all been built yet (see <see cref="GroundDone"/>).</summary>
+    private volatile bool _groundPending;
     private (int Known, int Waiting, int Queued, int AlreadyHad) _reported;
     private TimeSpan _reportedAt;
 
@@ -87,6 +89,14 @@ internal sealed class MipWarmer : IDisposable
     }
 
     public bool WarmsLoadedScenery { get; }
+
+    /// <summary>
+    /// When everything the ground pre-warm queued has been built and nothing else is building (again after a later
+    /// phase was queued, if the earlier ones finished first): the aircraft
+    /// still stands at the gate, and the build buffers can be given back. Not raised when the takeoff roll dropped
+    /// requests still waiting (the aircraft moves then). Raised on the warmer's own thread.
+    /// </summary>
+    public event Action? GroundDone;
 
     /// <summary>Warm builds started this session.</summary>
     public int Queued => Volatile.Read(ref _queued);
@@ -147,7 +157,22 @@ internal sealed class MipWarmer : IDisposable
         PrefetchPlaced(textures, place, phase);
 
     /// <summary>Drops the ground pre-warm's requests still waiting (the aircraft rolls for takeoff); returns how many.</summary>
-    public int CancelGround() => Drop(static r => r.Ground);
+    public int CancelGround()
+    {
+        int dropped = Drop(static r => r.Ground);
+        if (dropped > 0) _groundPending = false; // rolling: no compaction now
+        return dropped;
+    }
+
+    /// <summary>Raises <see cref="GroundDone"/> when the ground pre-warm's work is all built (called after each pass).</summary>
+    internal void CheckGroundDone()
+    {
+        if (!_groundPending || GroundWaiting > 0) return;
+        for (int kind = 0; kind < _running.Length; kind++)
+            if (Volatile.Read(ref _running[kind]) > 0) return;
+        _groundPending = false;
+        GroundDone?.Invoke();
+    }
 
     /// <summary>
     /// Drops the SimBrief departure's requests still waiting (the aircraft rolls for takeoff): their level and priority
@@ -214,6 +239,7 @@ internal sealed class MipWarmer : IDisposable
                 _waiting[request.Texture.Key] = request;
                 queued++;
             }
+        if (phase is not null && queued > 0) _groundPending = true;
         Wake();
         return (queued, had);
     }
@@ -306,6 +332,7 @@ internal sealed class MipWarmer : IDisposable
             while (!stop.IsCancellationRequested)
             {
                 StartWhatFits();
+                CheckGroundDone();
                 ReportProgress();
                 await _wake.WaitAsync(TimeSpan.FromSeconds(1), stop).ConfigureAwait(false);
             }

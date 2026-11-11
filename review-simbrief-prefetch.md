@@ -61,7 +61,10 @@ Never claim a test passed without running it.
 6. [x] **M3**: drop a failing base step after N attempts, count only real build starts, plus T3.
        N = 1: the request goes when its base build fails (or is still in its 15 s retry wait). Load-ahead's own
        requests come back with the next move anyway.
-7. [ ] **F3**: give the memory back once the ground queue is empty (ask how first, see "Stop and ask").
+7. [x] **F3**: give the memory back once the ground queue is empty (ask how first, see "Stop and ask").
+       Decided (user, 2026-11-11): the cheap fix first. `MipWarmer.GroundDone` + `PrewarmMemory`: one aggressive
+       compacting GC per session when the pre-warm is all built; none after a takeoff-roll cancel. Reusing the build
+       buffers stays open if the next flight log still shows it.
 8. [x] **R7**: one shared `orthostreamxp/<version>` User-Agent for the tile downloads, the Setup test and SimBrief.
        `HttpIdentity.UserAgent`, the app's version. Note: the tile downloads and the connection test sent a fixed
        `orthostreamxp/0.2` before; they now send the real version (as the mesh downloads already did).
@@ -82,7 +85,7 @@ Never claim a test passed without running it.
 18. [ ] **D1-D4**: help texts, the Home switch wording, the docs page and the release-notes entry.
 
 Nothing in the flight hurt X-Plane's reads (0 near waits, 1 middle wait of 4 ms, 3 far flat reads unrelated to the
-prefetch), so no F item jumps ahead of H1. F6 (climb by height) waits for the user's decision. F9 is load-ahead, not
+prefetch), so no F item jumps ahead of H1. F6 (climb by height): decided against, the climb keeps ending at TOC. F9 is load-ahead, not
 SimBrief: not in this plan.
 
 ### Stop and ask the user (don't decide alone)
@@ -92,9 +95,8 @@ SimBrief: not in this plan.
 - Adding a NuGet dependency, changing a public API or a settings name, or any broad refactor.
 - Anything on `main`. Creating the PR branch (that is after Step 1, see "Branch plan").
 - A flight finding that suggests changing the design itself (e.g. dropping the climb pre-warm).
-- **F6** (end the climb pre-warm by height, ~FL200, instead of at TOC): a design change, so ask first.
-- **F3**: how to give the memory back (a one-off compacting GC of the large-object heap is the cheap option; reusing
-  build buffers is the real fix, but it is broader).
+- ~~**F6**~~ Decided (user, 2026-11-11): the climb keeps ending at TOC. No change.
+- ~~**F3**~~ Decided (user, 2026-11-11): the cheap option first (step 7).
 
 ## Real flight EDDV → ENGM
 

@@ -229,7 +229,13 @@ internal sealed class MountSession : IDisposable
             .Select(m => (Mount: m, Warmer: m.Warmer!))
             .Select(m => new GroundTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, m.Warmer.PrefetchGround, m.Warmer.CancelGround,
                 m.Warmer.CancelDeparture))];
-        if (ground.Length > 0 && listener is not null) _ground = new GroundPrewarm(plan, ground, stop: stop);
+        if (ground.Length > 0 && listener is not null)
+        {
+            _ground = new GroundPrewarm(plan, ground, stop: stop);
+            var memory = new PrewarmMemory();
+            foreach (PackageMount mount in _mounts)
+                if (mount.Warmer is { } warmer) warmer.GroundDone += memory.OnGroundDone;
+        }
         _departure = Task.Run(async () =>
         {
             try
