@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using Fsp;
 using OrthoStreamXP.Scenery;
 using OrthoStreamXP.Setup;
@@ -256,8 +258,8 @@ internal sealed class MountSession : IDisposable
     {
         try
         {
-            return File.Exists(path) && double.TryParse(File.ReadAllText(path).Trim(), System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out double value) ? value : null;
+            return File.Exists(path) && double.TryParse(File.ReadAllText(path).Trim(), NumberStyles.Float,
+                CultureInfo.InvariantCulture, out double value) ? value : null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -269,7 +271,7 @@ internal sealed class MountSession : IDisposable
     {
         try
         {
-            AtomicFile.Write(path, System.Text.Encoding.UTF8.GetBytes(value.ToString("0", System.Globalization.CultureInfo.InvariantCulture)));
+            AtomicFile.Write(path, Encoding.UTF8.GetBytes(value.ToString("0", CultureInfo.InvariantCulture)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

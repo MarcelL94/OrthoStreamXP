@@ -28,6 +28,12 @@ internal sealed record FlightPlan(FlightOrigin Origin, FlightOrigin? Destination
     /// <summary>How long ago it was generated; null when unknown.</summary>
     public TimeSpan? AgeAt(DateTimeOffset now) => Generated is { } at ? now - at : null;
 
+    /// <summary>
+    /// An aircraft within this of the plan's departure is at it (the ground pre-warm starts there); farther away it flies
+    /// another flight and the plan is not this flight's (the departure prefetch is skipped or dropped).
+    /// </summary>
+    public const double NearDepartureKm = 50;
+
     /// <summary>Two airports this close share their scenery (the 3 x 4 tiles X-Plane loads round each are the same).</summary>
     public const double SamePlaceKm = 10;
 

@@ -71,6 +71,14 @@ internal sealed class SimBriefTestViewModel : ObservableObject
             Failed = answer.Origin is null;
             Status = Describe(answer);
         }
+#pragma warning disable CA1031 // The click's task is not awaited: an unexpected failure must show and be logged, not vanish.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            Log.Warning($"SimBrief connection test failed unexpectedly ({ex.GetType().Name}: {ex.Message})");
+            Failed = true;
+            Status = "The test failed unexpectedly; see the log.";
+        }
         finally
         {
             IsRunning = false;

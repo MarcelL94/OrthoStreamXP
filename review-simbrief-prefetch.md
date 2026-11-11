@@ -99,7 +99,12 @@ Never claim a test passed without running it.
         yet (ini only, like the radius); say so in D3.
 16. [ ] **M4**: not seen in flight (F7). Only if R6 is agreed: use real ground speed or on-ground data instead of the
         camera's motion.
-17. [ ] **Minor items** L1-L5, L8-L12 where cheap.
+        Deferred: waits for the maintainer's answer on R6 ("Stop and ask").
+17. [x] **Minor items** L1-L5, L8-L12 where cheap.
+        L1 with M2; L2 one `FlightPlan.NearDepartureKm`; L3 `GroundWatch.KnotsPerMps` (upstream's own uses of the
+        literal left alone); L5 `using`s; L11 the test button logs and shows an unexpected failure. Left: L4 (the help
+        texts already say "or the numeric Pilot ID"; D1 covers the rest), L8 (note only), L9 (the radius is ini-only, 1-50),
+        L10 (branch scope, not for the PR), L12 (a tooltip line, with D1/D2).
 18. [ ] **D1-D4**: help texts, the Home switch wording, the docs page and the release-notes entry.
 
 Nothing in the flight hurt X-Plane's reads (0 near waits, 1 middle wait of 4 ms, 3 far flat reads unrelated to the

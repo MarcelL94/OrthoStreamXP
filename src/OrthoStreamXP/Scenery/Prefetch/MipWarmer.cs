@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using OrthoStreamXP.Textures;
 
@@ -75,7 +76,7 @@ internal sealed class MipWarmer : IDisposable
     private readonly Lock _gate = new();
     private readonly Dictionary<string, Request> _waiting = [];
     /// <summary>Textures whose base tile is being fetched before the level asked for (see <see cref="Target"/>).</summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _stepping = new();
+    private readonly ConcurrentDictionary<string, byte> _stepping = new();
     private readonly SemaphoreSlim _wake = new(0);
     private readonly CancellationTokenSource _stop = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();

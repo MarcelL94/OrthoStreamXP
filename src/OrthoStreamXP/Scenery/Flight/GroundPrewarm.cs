@@ -15,7 +15,9 @@ internal enum GroundDecision { None, Start, Stop, Rolled }
 /// </summary>
 internal sealed class GroundWatch(double departureLat, double departureLon)
 {
-    public const double ParkedKt = 3, RollingKt = 40, OnGroundM = 300, NearDepartureKm = 50;
+    public const double ParkedKt = 3, RollingKt = 40, OnGroundM = 300;
+    /// <summary>Metres per second to knots.</summary>
+    public const double KnotsPerMps = 1.943844;
     public static readonly TimeSpan ParkedFor = TimeSpan.FromSeconds(30);
 
     private enum State { Waiting, Running, Done }
@@ -43,7 +45,7 @@ internal sealed class GroundWatch(double departureLat, double departureLon)
                 return GroundDecision.Rolled;
             case State.Waiting:
                 bool parked = !inferred && speed <= ParkedKt && heightM <= OnGroundM
-                              && Geo.DistanceM(departureLat, departureLon, lat, lon) <= NearDepartureKm * 1000;
+                              && Geo.DistanceM(departureLat, departureLon, lat, lon) <= FlightPlan.NearDepartureKm * 1000;
                 if (!parked)
                 {
                     _parkedSince = null;
@@ -123,7 +125,7 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
             DropDepartureIfElsewhere(flight, camera);
         }
         _watch ??= new GroundWatch(flight.Origin.Lat, flight.Origin.Lon);
-        switch (_watch.Update(camera.Lat, camera.Lon, camera.Motion?.SpeedMps * 1.943844, camera.HeightAglM, camera.Inferred, camera.ReceivedUtc))
+        switch (_watch.Update(camera.Lat, camera.Lon, camera.Motion?.SpeedMps * GroundWatch.KnotsPerMps, camera.HeightAglM, camera.Inferred, camera.ReceivedUtc))
         {
             case GroundDecision.Start:
                 int generation = _generation;
@@ -254,7 +256,7 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
     private void DropDepartureIfElsewhere(FlightPlan flight, CameraReport camera)
     {
         double km = Geo.DistanceM(flight.Origin.Lat, flight.Origin.Lon, camera.Lat, camera.Lon) / 1000;
-        if (km <= DeparturePrefetch.StalePlanKm) return;
+        if (km <= FlightPlan.NearDepartureKm) return;
         int dropped = targets.Sum(t => t.CancelDeparture());
         Log.Info($"SimBrief: the aircraft is {km:0} km from the flight plan's departure {Name(flight.Origin)}, so the plan is not this flight's; " +
                  $"{dropped} departure textures still waiting were dropped");

@@ -25,8 +25,6 @@ internal sealed class DeparturePrefetch(Func<CancellationToken, Task<FlightPlan?
 {
     /// <summary>The most textures queued per package: a 10 km circle holds a few hundred ZL18 textures at most.</summary>
     public const int MaxTextures = 600;
-    /// <summary>An aircraft farther than this from the plan's origin is somewhere else: the flight plan is not this flight's.</summary>
-    public const double StalePlanKm = 50;
 
     /// <summary>Queues the departure textures the cache does not have; returns how many were queued.</summary>
     public async Task<int> RunAsync(CancellationToken ct)
@@ -39,9 +37,9 @@ internal sealed class DeparturePrefetch(Func<CancellationToken, Task<FlightPlan?
             Log.Info($"SimBrief: the latest flight plan ({place}) is {age.TotalHours:0} h old; its departure is not prefetched");
             return 0;
         }
-        if (aircraft() is { } at && Geo.DistanceM(at.Lat, at.Lon, from.Lat, from.Lon) > StalePlanKm * 1000)
+        if (aircraft() is { } at && Geo.DistanceM(at.Lat, at.Lon, from.Lat, from.Lon) > FlightPlan.NearDepartureKm * 1000)
         {
-            Log.Info($"SimBrief: {place} is the latest flight plan's departure, but the aircraft is more than {StalePlanKm:0} km away; nothing prefetched");
+            Log.Info($"SimBrief: {place} is the latest flight plan's departure, but the aircraft is more than {FlightPlan.NearDepartureKm:0} km away; nothing prefetched");
             return 0;
         }
 
