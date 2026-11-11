@@ -114,6 +114,17 @@
                                   Visibility="{Binding ShowDeparturePrefetch, Converter={StaticResource Visible}}"
                                   ToolTip="For this session: builds the scenery around your latest SimBrief flight plan's departure when streaming starts, and the arrival, alternate and climb while the aircraft stands at the gate. It is on again the next time OrthoStreamXP opens, and can be changed while streaming is stopped."
                                   AutomationProperties.Name="SimBrief Prefetch enabled for this session" />
+                        <Button Command="{Binding ReloadFlightPlan}" MinHeight="30" Padding="12,3" Margin="0,8,0,0" HorizontalAlignment="Right"
+                                Visibility="{Binding ShowReloadFlightPlan, Converter={StaticResource Visible}}"
+                                ToolTip="Generated your SimBrief flight plan after starting streaming, or planned another flight? Asks SimBrief for your latest flight plan now and builds its scenery. SimBrief is only asked when you press this."
+                                AutomationProperties.Name="Reload SimBrief flight plan">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" Margin="0,0,8,0" />
+                                <TextBlock Text="Reload SimBrief flight plan" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <TextBlock Text="{Binding ReloadStatus}" TextWrapping="Wrap" MaxWidth="320" TextAlignment="Right" HorizontalAlignment="Right"
+                                   Margin="0,4,0,0" Opacity="0.8" Visibility="{Binding ShowReloadStatus, Converter={StaticResource Visible}}" />
                     </StackPanel>
                 </Grid>
             </Border>

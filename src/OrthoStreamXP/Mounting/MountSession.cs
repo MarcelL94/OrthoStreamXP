@@ -28,10 +28,10 @@ internal sealed class MountSession : IDisposable
     private ReadLog? _readLog;
     private SeasonClock? _seasons;
     private ColourMatcher? _colours;
-    private Task? _summaryLoop, _sampleLoop, _departure;
+    private Task? _summaryLoop, _sampleLoop;
     private HttpClient? _simBrief;
     /// <summary>The ground pre-warm, once the flight plan is asked for; told every position X-Plane sends.</summary>
-    private volatile GroundPrewarm? _ground;
+    private volatile SimBriefSession? _simBriefSession;
     private bool _stopped;
 
     private MountSession(MountSettings settings)
@@ -168,7 +168,7 @@ internal sealed class MountSession : IDisposable
                 {
                     _view.Update(camera);
                     readLog?.Camera(camera);
-                    _ground?.OnCamera(camera);
+                    _simBriefSession?.OnCamera(camera);
                 },
                 streaming
                     ? (width, fieldOfView) =>
@@ -220,47 +220,33 @@ internal sealed class MountSession : IDisposable
         _simBrief = new HttpClient();
         var client = new SimBriefClient(_simBrief);
         AircraftPositionListener? listener = _listener;
-        CancellationToken stop = _summaries.Token;
-        // One flight plan for the departure prefetch and the ground pre-warm.
         if (_settings.SimBriefMaxMb > 0)
         {
             var budget = new PrefetchBudget(_settings.SimBriefMaxMb * 1024L * 1024);
             foreach (PackageMount mount in _mounts) mount.Warmer?.UseBudget(budget);
         }
-        Task<FlightPlan?> plan = client.LatestPlanAsync(user, stop);
-        var prefetch = new DeparturePrefetch(plan.WaitAsync,
-            () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, targets, _settings.SimBriefRadiusKm);
-        GroundTarget[] ground = [.. _mounts.Where(m => m.Warmer is not null)
+        // The ground pre-warm needs X-Plane's positions.
+        GroundTarget[] ground = listener is null ? [] : [.. _mounts.Where(m => m.Warmer is not null)
             .Select(m => (Mount: m, Warmer: m.Warmer!))
             .Select(m => new GroundTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, m.Warmer.PrefetchGround, m.Warmer.CancelGround,
                 m.Warmer.CancelDeparture))];
-        if (ground.Length > 0 && listener is not null)
+        if (ground.Length > 0)
         {
-            _ground = new GroundPrewarm(plan, ground, stop: stop);
             var memory = new PrewarmMemory();
             foreach (PackageMount mount in _mounts)
                 if (mount.Warmer is { } warmer) warmer.GroundDone += memory.OnGroundDone;
         }
-        _departure = Task.Run(async () =>
-        {
-            try
-            {
-                await prefetch.RunAsync(stop).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (stop.IsCancellationRequested)
-            {
-                // Stopped before the flight plan arrived.
-            }
-            catch (IOException ex)
-            {
-                Log.Warning($"SimBrief: departure prefetch failed ({ex.Message})");
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                Log.Warning($"SimBrief: departure prefetch failed ({ex.Message})");
-            }
-        }, stop);
+        var simBrief = new SimBriefSession(ct => client.FetchAsync(user, ct), targets, ground,
+            () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, _settings.SimBriefRadiusKm, stop: _summaries.Token);
+        _simBriefSession = simBrief;
+        simBrief.Start();
     }
+
+    /// <summary>Whether this session has a SimBrief flight plan to reload (a SimBrief user is set and the prefetch is on).</summary>
+    public bool CanReloadFlightPlan => _simBriefSession is not null;
+
+    /// <summary>The Home page's "Reload SimBrief flight plan": what came of it, in the window's words; null without SimBrief.</summary>
+    public Task<string>? ReloadFlightPlanAsync() => _stopped ? null : _simBriefSession?.ReloadAsync();
 
     /// <summary>The paging model's k from X-Plane's screen last time: the first guess at the next start.</summary>
     private const string PagingScreenFile = "paging-screen-k.txt";
@@ -361,8 +347,9 @@ internal sealed class MountSession : IDisposable
             else
                 await finished.ConfigureAwait(false);
         }
-        // The ground pre-warm's queuing goes into the packages' load-ahead: it ends before they are disposed.
-        foreach (Task? loop in new[] { _summaryLoop, _sampleLoop, _departure, _ground?.Running })
+        // SimBrief's departure prefetch, reload and ground pre-warm queue into the packages' load-ahead: they end before
+        // the packages are disposed.
+        foreach (Task? loop in new[] { _summaryLoop, _sampleLoop, _simBriefSession?.WhenDone() })
         {
             if (loop is null) continue;
             try

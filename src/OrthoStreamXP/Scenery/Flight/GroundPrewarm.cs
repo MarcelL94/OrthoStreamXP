@@ -80,17 +80,42 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
 {
     public const int Arrival = 0, Alternate = 1, Route = 2;
 
+    private readonly Lock _gate = new();
+    private Task<FlightPlan?> _plan = plan;
     private GroundWatch? _watch;
     private volatile bool _stopped;
     private bool _positionChecked;
+    /// <summary>Counts the plans: a queuing for an earlier one stops (see <see cref="UsePlan"/>).</summary>
+    private volatile int _generation;
 
     /// <summary>The queuing once the pre-warm started; the session awaits it before the packages go away.</summary>
     public Task Running { get; private set; } = Task.CompletedTask;
 
+    /// <summary>
+    /// A newer flight plan (the Home page's reload): watched from the start again, so the pre-warm runs for it once the
+    /// aircraft stands at its departure. The caller drops the old plan's requests; a queuing for it still running stops.
+    /// </summary>
+    public void UsePlan(FlightPlan flight)
+    {
+        lock (_gate)
+        {
+            _plan = Task.FromResult<FlightPlan?>(flight);
+            _watch = null;
+            _positionChecked = false;
+            _stopped = false;
+            _generation++;
+        }
+    }
+
     /// <summary>Every position X-Plane sends (from its UDP thread): starts or stops the pre-warm when the watch says so.</summary>
     public void OnCamera(CameraReport camera)
     {
-        if (stop.IsCancellationRequested || !plan.IsCompletedSuccessfully || plan.Result is not { } flight) return;
+        lock (_gate) OnCameraLocked(camera);
+    }
+
+    private void OnCameraLocked(CameraReport camera)
+    {
+        if (stop.IsCancellationRequested || !_plan.IsCompletedSuccessfully || _plan.Result is not { } flight) return;
         if (!camera.Inferred && !_positionChecked)
         {
             _positionChecked = true;
@@ -100,7 +125,9 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
         switch (_watch.Update(camera.Lat, camera.Lon, camera.Motion?.SpeedMps * 1.943844, camera.HeightAglM, camera.Inferred, camera.ReceivedUtc))
         {
             case GroundDecision.Start:
-                Running = (run ?? Task.Run)(() => QueueInBackground(flight));
+                int generation = _generation;
+                Task queuing = (run ?? Task.Run)(() => QueueInBackground(flight, generation));
+                Running = Running.IsCompleted ? queuing : Task.WhenAll(Running, queuing);
                 break;
             case GroundDecision.Stop:
                 _stopped = true;
@@ -117,11 +144,11 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
     /// <see cref="Queue"/> off the UDP thread. Never throws: a failure is logged (the pre-warm is a hint, never a reason
     /// for streaming to fail), and the session's stop ends it quietly.
     /// </summary>
-    private void QueueInBackground(FlightPlan flight)
+    private void QueueInBackground(FlightPlan flight, int generation)
     {
         try
         {
-            Queue(flight);
+            Queue(flight, generation);
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
@@ -141,14 +168,16 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
         {
             Log.Warning($"Ground pre-warm failed unexpectedly ({ex.GetType().Name}: {ex.Message})");
         }
-        if (!_stopped) return;
-        // The aircraft rolled while it was being queued: what went in after the roll's cancel goes too.
+        if (!_stopped && generation == _generation) return;
+        // The aircraft rolled (or a newer plan came) while it was being queued: what went in after the cancel goes too.
         int late = targets.Sum(t => t.Cancel());
         if (late > 0) Log.Info($"Ground pre-warm: {late} more textures queued during the takeoff roll were dropped");
     }
 
     /// <summary>Queues the three phases in every package; returns how many textures were queued.</summary>
-    internal int Queue(FlightPlan flight)
+    internal int Queue(FlightPlan flight) => Queue(flight, _generation);
+
+    private int Queue(FlightPlan flight, int generation)
     {
         Log.Info($"Ground pre-warm: the aircraft stands at {Name(flight.Origin)}; building the rest of the flight's scenery until it rolls for takeoff");
         int queued = 0;
@@ -160,7 +189,7 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
                 if (FlightPlan.SamePlace(to, flight.Origin))
                     Log.Info($"Ground pre-warm: the arrival {Name(to)} is the departure; its scenery is the departure's ({target.Name})");
                 else
-                    queued += Area(target, to, Arrival, "arrival");
+                    queued += Area(target, to, Arrival, "arrival", generation);
             }
             if (flight.Alternate is { } alternate)
             {
@@ -169,16 +198,19 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
                 else if (FlightPlan.SamePlace(alternate, flight.Origin))
                     Log.Info($"Ground pre-warm: the alternate {Name(alternate)} is the departure; its scenery is the departure's ({target.Name})");
                 else
-                    queued += Area(target, alternate, Alternate, "alternate");
+                    queued += Area(target, alternate, Alternate, "alternate", generation);
             }
-            queued += Climb(target, flight);
+            queued += Climb(target, flight, generation);
         }
         return queued;
     }
 
-    private int Area(GroundTarget target, FlightOrigin airport, int phase, string what)
+    /// <summary>The aircraft rolled, or a newer plan replaced the one being queued: queue no more of it.</summary>
+    private bool Stale(int generation) => _stopped || generation != _generation;
+
+    private int Area(GroundTarget target, FlightOrigin airport, int phase, string what, int generation)
     {
-        if (_stopped) return 0;
+        if (Stale(generation)) return 0;
         stop.ThrowIfCancellationRequested();
         IReadOnlyList<VirtualPath> textures = SceneryArea.Textures(target.Source, airport.Lat, airport.Lon, out int tiles);
         if (textures.Count == 0)
@@ -195,9 +227,9 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
         return queued;
     }
 
-    private int Climb(GroundTarget target, FlightPlan flight)
+    private int Climb(GroundTarget target, FlightPlan flight, int generation)
     {
-        if (_stopped) return 0;
+        if (Stale(generation)) return 0;
         stop.ThrowIfCancellationRequested();
         ClimbRoute.Climb climb = ClimbRoute.Of(flight);
         if (climb.Samples.Count < 2)

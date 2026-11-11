@@ -91,7 +91,7 @@ internal sealed class SimBriefClient(HttpClient http)
             if (status is not null && !status.Equals("Success", StringComparison.OrdinalIgnoreCase))
                 return SimBriefAnswer.Failed(status.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) ? status[6..].Trim() : status);
             if (Airport(root, "origin") is not { } origin) return SimBriefAnswer.Failed("the latest flight plan has no departure position");
-            return new SimBriefAnswer(new FlightPlan(origin, Airport(root, "destination"), Airport(root, "alternate"), Route(root), Generated(root)), null);
+            return new SimBriefAnswer(new FlightPlan(origin, Airport(root, "destination"), Airport(root, "alternate"), Route(root), Generated(root), RequestId(root)), null);
         }
         catch (JsonException)
         {
@@ -115,6 +115,20 @@ internal sealed class SimBriefClient(HttpClient http)
         if (!root.TryGetProperty("params", out JsonElement parameters) || parameters.ValueKind != JsonValueKind.Object
             || Number(parameters, "time_generated") is not { } seconds || seconds is <= 0 or > 32503680000) return null; // > year 3000: not a time
         return DateTimeOffset.FromUnixTimeSeconds((long)seconds);
+    }
+
+    /// <summary>SimBrief's id of the OFP, <c>params.request_id</c> (a string or a number).</summary>
+    private static string? RequestId(JsonElement root)
+    {
+        if (!root.TryGetProperty("params", out JsonElement parameters) || parameters.ValueKind != JsonValueKind.Object
+            || !parameters.TryGetProperty("request_id", out JsonElement id)) return null;
+        string? text = id.ValueKind switch
+        {
+            JsonValueKind.String => id.GetString(),
+            JsonValueKind.Number => id.GetRawText(),
+            _ => null,
+        };
+        return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
     }
 
     /// <summary>The navlog's points in order; one point comes as an object, not an array.</summary>

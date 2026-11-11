@@ -246,9 +246,113 @@ public sealed class SimBriefPrefetchTests : IDisposable
     {
         const string withTime = """{"fetch":{"status":"Success"},"params":{"request_id":"1","time_generated":"1762790400"},"origin":{"icao_code":"EDDM","pos_lat":"48.35","pos_long":"11.78"}}""";
         Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1762790400), SimBriefClient.Parse(withTime).Plan!.Generated);
+        Assert.Equal("1", SimBriefClient.Parse(withTime).Plan!.Id); // params.request_id: tells a reloaded OFP from the same one
+        Assert.Null(SimBriefClient.Parse(Ofp).Plan!.Id);
         Assert.Null(SimBriefClient.Parse(Ofp).Plan!.Generated); // no params
         const string garbled = """{"params":{"time_generated":"soon"},"origin":{"icao_code":"EDDM","pos_lat":"48.35","pos_long":"11.78"}}""";
         Assert.Null(SimBriefClient.Parse(garbled).Plan!.Generated);
+    }
+
+    // ---------------------------------------------------------------- reloading the plan (M1, R9)
+
+    private static readonly FlightOrigin Eddm = new("EDDM", Lat, Lon), Egll = new("EGLL", 51.4775, -0.461389);
+
+    private static SimBriefAnswer Answer(FlightOrigin from, FlightOrigin to, string id) => new(new FlightPlan(from, to, null, [], null, id), null);
+
+    /// <summary>A session over the EDDM package, its fetch answering <paramref name="answers"/> in turn (the last again after).</summary>
+    private (SimBriefSession Session, Func<int> Fetches, List<VirtualPath> Departure, Func<(int Cancel, int CancelDeparture, int Starts)> Counts)
+        Session(params Func<Task<SimBriefAnswer>>[] answers)
+    {
+        int fetches = 0, cancels = 0, cancelDepartures = 0, starts = 0;
+        var departure = new List<VirtualPath>();
+        string package = Package(AtAirport, Around);
+        var target = new DepartureTarget("pkg", package, _ => false, textures =>
+        {
+            lock (departure) departure.AddRange(textures);
+            return textures.Count;
+        });
+        var ground = new GroundTarget("pkg", package, (_, _, _) => (0, 0), () => ++cancels, () => ++cancelDepartures);
+        var session = new SimBriefSession(_ => answers[Math.Min(Interlocked.Increment(ref fetches), answers.Length) - 1](), [target], [ground],
+            () => null, radiusKm: 10, Clock, run: _ =>
+            {
+                starts++;
+                return Task.CompletedTask;
+            });
+        return (session, () => Volatile.Read(ref fetches), departure, () => (cancels, cancelDepartures, starts));
+    }
+
+    private static CameraReport ParkedAt(FlightOrigin airport, double seconds) =>
+        new(airport.Lat, airport.Lon, 3, null, null, false, new DateTime(2026, 11, 11, 12, 0, 0, DateTimeKind.Utc).AddSeconds(seconds));
+
+    [Fact]
+    public async Task A_reloaded_plan_from_elsewhere_drops_the_old_one_prefetches_its_departure_and_watches_its_gate()
+    {
+        var (session, fetches, departure, counts) = Session(() => Task.FromResult(Answer(Egll, Eddm, "1")), () => Task.FromResult(Answer(Eddm, Egll, "2")));
+        session.Start();
+        await session.WhenDone();
+        Assert.Empty(departure); // EGLL: this package has nothing there
+        session.OnCamera(ParkedAt(Egll, 0));
+        session.OnCamera(ParkedAt(Egll, 31));
+        Assert.Equal((0, 0, 1), counts()); // the old plan's pre-warm ran
+
+        string said = await session.ReloadAsync();
+
+        Assert.StartsWith("Loaded EDDM → EGLL", said, StringComparison.Ordinal);
+        Assert.Equal((1, 1), (counts().Cancel, counts().CancelDeparture)); // the old plan's requests went
+        Assert.Equal([AtAirport.Stem, Around.Stem], Stems(departure)); // the new departure is built
+        Assert.Equal("2", session.Current!.Id);
+        session.OnCamera(ParkedAt(Eddm, 100));
+        session.OnCamera(ParkedAt(Eddm, 131));
+        Assert.Equal(2, counts().Starts); // watched from the start for the new gate
+        Assert.Equal(2, fetches());
+    }
+
+    [Fact]
+    public async Task Reloading_the_same_plan_changes_nothing()
+    {
+        var (session, fetches, departure, counts) = Session(() => Task.FromResult(Answer(Eddm, Egll, "7")));
+        session.Start();
+        await session.WhenDone();
+        departure.Clear();
+
+        string said = await session.ReloadAsync();
+
+        Assert.StartsWith("Unchanged: EDDM → EGLL", said, StringComparison.Ordinal);
+        Assert.Equal((0, 0, 0), counts());
+        Assert.Empty(departure);
+        Assert.Equal(2, fetches());
+    }
+
+    [Fact]
+    public async Task Two_presses_during_one_reload_send_one_request()
+    {
+        var held = new TaskCompletionSource<SimBriefAnswer>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var (session, fetches, _, _) = Session(() => Task.FromResult(Answer(Eddm, Egll, "1")), () => held.Task);
+        session.Start();
+        await session.FirstPlan;
+
+        Task<string> first = session.ReloadAsync(), second = session.ReloadAsync();
+        Assert.Same(first, second);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+        held.SetResult(Answer(Eddm, Egll, "1"));
+        await first;
+
+        Assert.Equal(2, fetches()); // the start's and one reload
+    }
+
+    [Fact]
+    public async Task A_plan_generated_after_streaming_started_is_found_by_the_reload()
+    {
+        // The common case: OrthoStreamXP started first, the OFP generated afterwards.
+        var (session, _, departure, _) = Session(() => Task.FromResult(SimBriefAnswer.Failed("no flight plan yet")),
+            () => Task.FromResult(Answer(Eddm, Egll, "3")));
+        session.Start();
+        await session.WhenDone();
+        Assert.Empty(departure);
+
+        Assert.StartsWith("Loaded EDDM → EGLL", await session.ReloadAsync(), StringComparison.Ordinal);
+        Assert.NotEmpty(departure);
+        Assert.Equal("EDDM", SimBriefSession.Describe(new FlightPlan(Eddm, null, null, []))); // no destination: the departure alone
     }
 
     [Fact]

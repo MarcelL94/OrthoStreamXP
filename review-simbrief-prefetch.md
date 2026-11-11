@@ -89,7 +89,11 @@ Never claim a test passed without running it.
         spent by the phase meters' build bytes; then each warmer drops its waiting SimBrief requests and queues no more.
         Not covered: the whole-texture fallback without mip streaming (as in H4). Revisit the default with the R12 numbers.
 13. [x] **R5**: unflown areas rank as least recently used in `CacheAreas.Trim`, plus a test (F5).
-14. [ ] **M1 / R9**: the "Reload SimBrief flight plan" button on Home (button only, no automatic fetch), plus its tests.
+14. [x] **M1 / R9**: the "Reload SimBrief flight plan" button on Home (button only, no automatic fetch), plus its tests.
+        `SimBriefSession` now owns the plan, the departure prefetch and the ground pre-warm (`MountSession` builds it).
+        A new OFP (`params.request_id`, else `time_generated`) drops the old plan's waiting ground requests, and its
+        departure ones when the origin moved (then the new departure is prefetched); `GroundPrewarm.UsePlan` re-arms the
+        watch. Not run in the real window yet: check the button's look and the status text on the next RC.
 15. [ ] **Alternate behind its own switch** (default off), as the maintainer asked (PR structure step 3). F5 backs it.
 16. [ ] **M4**: not seen in flight (F7). Only if R6 is agreed: use real ground speed or on-ground data instead of the
         camera's motion.
@@ -256,7 +260,7 @@ one from the fresh branch once R1 and R2 are done.
 | R6 | Reuse the existing models | **Open**, ask him | See below |
 | R7 | User-Agent `orthostreamxp/<version>` like the tile downloads | Done (L6) | One shared constant for the tile downloads, the Setup test and SimBrief |
 | R8 | Never log the username or Pilot ID | Done (tested) | No log line contains it, and the URL with `?username=` is never logged. Add a test that the problems `SimBriefAnswer` can carry never contain the user |
-| R9 | Fetch once per mount, plus an explicit re-fetch, no polling | Done for once per mount; **button open** (M1) | Clarified: "explicit" means a **button the user presses whenever they want**. No automatic re-fetch (not even when parked) and no polling. See M1 |
+| R9 | Fetch once per mount, plus an explicit re-fetch, no polling | Done (button, step 14) | Clarified: "explicit" means a **button the user presses whenever they want**. No automatic re-fetch (not even when parked) and no polling. See M1 |
 | R10 | Short timeout, a slow SimBrief never holds up the mount | Done | 10 s, and the fetch runs in the background (L7 dropped) |
 | R11 | Stale OFP guard: near the origin and/or recent, otherwise log the skip | Done (H5) | `FlightPlan.MaxAge` (6 h, from `params.time_generated`) at mount start; the first real position > 50 km from the origin drops the departure requests (`GroundPrewarm.DropDepartureIfElsewhere`). Both log the skip |
 | R12 | Numbers in the PR: tiles and MB, build time, hit rate | Logging done; **flights open** | Summary per phase at stop (step 10). Still to fly the 3-5 flights and put the table in the PR |
