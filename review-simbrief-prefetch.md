@@ -65,7 +65,7 @@ R1 and R2 are done.
 | R6 | Reuse the existing models | **Open**, ask him | See below |
 | R7 | User-Agent `orthostreamxp/<version>` like the tile downloads | **Open** (L6) | One shared constant for the tile downloads, the Setup test and SimBrief |
 | R8 | Never log the username or Pilot ID | Done (checked) | No log line contains it, and the URL with `?username=` is never logged. Add a test that the problems `SimBriefAnswer` can carry never contain the user |
-| R9 | Fetch once per mount, plus an explicit re-fetch if added, no polling | Done for once per mount | M1's re-fetch must be a single explicit action (a Home "Reload flight plan" button, or one fetch when the aircraft is parked), never periodic. Ask which he means by "explicit" |
+| R9 | Fetch once per mount, plus an explicit re-fetch, no polling | Done for once per mount; **button open** (M1) | Clarified: "explicit" means a **button the user presses whenever they want**. No automatic re-fetch (not even when parked) and no polling. See M1 |
 | R10 | Short timeout, a slow SimBrief never holds up the mount | Done | 10 s, and the fetch runs in the background (L7 dropped) |
 | R11 | Stale OFP guard: near the origin and/or recent, otherwise log the skip | **Open** (H5) | See below: the position check alone kills the main win |
 | R12 | Numbers in the PR: tiles and MB, build time, hit rate | **Open**, new | See below |
@@ -142,7 +142,7 @@ also decide the default budget (R4) and whether the alternate is worth keeping (
 | H3 | Medium-High (verify) | MipWarmer | Ground heavy builds hold heavy slots while waiting at the lowest download priority |
 | H4 | Medium-High | Departure prefetch | Departure requests never expire, even after takeoff |
 | H5 | Medium-High | Departure prefetch | A stale OFP prefetches the wrong airport |
-| M1 | Medium | MountSession | The OFP is fetched once, at mount start only |
+| M1 | Medium | MountSession | The OFP is fetched once, at mount start only: add a reload button (R9) |
 | M2 | Medium | GroundPrewarm | Fire-and-forget queue task, not awaited on stop |
 | M3 | Medium | MipWarmer | A base step that keeps failing never leaves the queue and inflates the build counter |
 | M4 | Low-Medium | GroundWatch | The camera's speed (outside view) can stop the pre-warm |
@@ -235,9 +235,23 @@ also decide the default budget (R4) and whether the alternate is worth keeping (
 - If the pilot starts OrthoStreamXP first and generates the OFP afterwards (very common), neither feature runs for that
   flight. A second flight in the same session also keeps the old plan (`GroundWatch` goes to `Done` and never
   restarts).
-- **Fix:** fetch the OFP again when `GroundWatch` reports `Start` (parked for 30 s), at least when the cached plan's
-  origin is far from the parked aircraft or the plan is old. It costs one HTTP call per flight. Reset the watch when a
-  new plan with a different origin arrives.
+- **Fix (per R9: a button only, no automatic re-fetch):**
+  - Add a **"Reload SimBrief flight plan"** button on Home. It is visible while streaming runs with a SimBrief user set,
+    and the user may press it whenever they want. Disable it while a fetch is running, so a double click can't send
+    two requests. Never fetch on a timer, and not automatically when parked.
+  - On a new plan:
+    - If its origin differs from the current one, drop the old plan's departure and ground requests (H4's marking),
+      then run the departure prefetch for the new origin.
+    - Reset `GroundWatch` to `Waiting`, so the gate pre-warm can start again for the new flight.
+    - If it is the same OFP (same `params.request_id`), log "unchanged" and do nothing.
+  - Show the result next to the button, reusing `SimBriefTestViewModel`'s wording ("EDDH → EGPH, generated 12 min
+    ago", or why there is none). Log it without the username (R8).
+  - Mention the button in the Home tooltip and the docs (D1, D3): "generated your OFP after starting? Press Reload".
+  - Wiring: `MountSession` exposes `ReloadFlightPlanAsync()`, and `MountController` and `HomeViewModel` call it. Put the
+    plan task and its consumers behind the small `SimBriefSession` class suggested under "Branch scope", so the
+    reload swaps the plan in one place.
+  - Tests: the reload replaces the plan, cancels the old departure requests and resets the watch. An unchanged OFP
+    queues nothing. Two presses during one fetch send one request.
 
 ### M2. The ground pre-warm task is fire-and-forget
 
