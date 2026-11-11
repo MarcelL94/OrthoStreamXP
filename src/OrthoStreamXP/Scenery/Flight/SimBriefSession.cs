@@ -9,10 +9,7 @@ namespace OrthoStreamXP.Scenery;
 internal sealed class SimBriefSession
 {
     private readonly Func<CancellationToken, Task<SimBriefAnswer>> _fetch;
-    private readonly IReadOnlyList<DepartureTarget> _departureTargets;
-    private readonly IReadOnlyList<GroundTarget> _groundTargets;
-    private readonly Func<(double Lat, double Lon)?> _aircraft;
-    private readonly double _radiusKm;
+    private readonly DeparturePrefetch _departure;
     private readonly CancellationToken _stop;
     private readonly TimeProvider _clock;
     private readonly Lock _gate = new();
@@ -30,11 +27,8 @@ internal sealed class SimBriefSession
         TimeProvider? clock = null, Func<Action, Task>? run = null, bool alternate = false, CancellationToken stop = default)
     {
         _fetch = fetch;
-        _departureTargets = departureTargets;
-        _groundTargets = groundTargets;
-        _aircraft = aircraft;
-        _radiusKm = radiusKm;
         _clock = clock ?? TimeProvider.System;
+        _departure = new DeparturePrefetch(aircraft, departureTargets, radiusKm, _clock);
         _stop = stop;
         FirstPlan = FetchFirstAsync();
         if (groundTargets.Count > 0) Ground = new GroundPrewarm(FirstPlan, groundTargets, run, alternate, stop);
@@ -55,7 +49,10 @@ internal sealed class SimBriefSession
     }
 
     /// <summary>Starts the departure prefetch for the first plan, in the background.</summary>
-    public void Start() => Track(PrefetchDepartureAsync(FirstPlan.WaitAsync));
+    public void Start()
+    {
+        lock (_gate) _work.Add(PrefetchDepartureAsync(FirstPlan));
+    }
 
     /// <summary>Every position X-Plane sends (from its UDP thread).</summary>
     public void OnCamera(CameraReport camera) => Ground?.OnCamera(camera);
@@ -81,11 +78,6 @@ internal sealed class SimBriefSession
         lock (_gate) return Task.WhenAll([.. _work, Ground?.Running ?? Task.CompletedTask]);
     }
 
-    private void Track(Task task)
-    {
-        lock (_gate) _work.Add(task);
-    }
-
     private async Task<FlightPlan?> FetchFirstAsync()
     {
         SimBriefAnswer answer = await _fetch(_stop).ConfigureAwait(false);
@@ -103,7 +95,7 @@ internal sealed class SimBriefSession
             if (answer.Plan is not { } plan)
             {
                 Log.Info($"SimBrief: reloading the flight plan: {answer.Problem}");
-                return $"No flight plan: {answer.Problem?.TrimEnd('.')}.";
+                return answer.NoPlan;
             }
             FlightPlan? old;
             lock (_gate)
@@ -111,19 +103,19 @@ internal sealed class SimBriefSession
                 old = _current;
                 _current = plan;
             }
-            string flight = Describe(plan);
+            string flight = plan.Describe();
             if (plan.SameOfp(old))
             {
                 Log.Info($"SimBrief: reloaded the flight plan; unchanged ({flight})");
                 return $"Unchanged: {flight} is still your latest flight plan{Age(plan)}.";
             }
             bool moved = old is null || !FlightPlan.SamePlace(old.Origin, plan.Origin);
-            int ground = _groundTargets.Sum(t => t.Cancel());
-            int departure = moved ? _groundTargets.Sum(t => t.CancelDeparture()) : 0;
+            int ground = Ground?.DropGround() ?? 0;
+            int departure = moved ? Ground?.DropDeparture() ?? 0 : 0;
             Ground?.UsePlan(plan);
             Log.Info($"SimBrief: new flight plan {flight}{Age(plan)}; the old one's textures still waiting were dropped " +
                      $"({ground} of the ground pre-warm{(moved ? $", {departure} of the departure" : "")})");
-            if (moved) await PrefetchDepartureAsync(_ => Task.FromResult<FlightPlan?>(plan)).ConfigureAwait(false);
+            if (moved) await PrefetchDepartureAsync(Task.FromResult<FlightPlan?>(plan)).ConfigureAwait(false);
             return $"Loaded {flight}{Age(plan)}." + (moved ? " Its departure is being built." : "");
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
@@ -132,12 +124,13 @@ internal sealed class SimBriefSession
         }
     }
 
-    /// <summary>The departure prefetch for a plan; a failure is only logged.</summary>
-    private async Task PrefetchDepartureAsync(Func<CancellationToken, Task<FlightPlan?>> plan)
+    /// <summary>The departure prefetch for a plan once it is there; a failure is only logged.</summary>
+    private async Task PrefetchDepartureAsync(Task<FlightPlan?> plan)
     {
         try
         {
-            await new DeparturePrefetch(plan, _aircraft, _departureTargets, _radiusKm, _clock).RunAsync(_stop).ConfigureAwait(false);
+            FlightPlan? flight = await plan.WaitAsync(_stop).ConfigureAwait(false);
+            await Task.Run(() => _departure.Run(flight, _stop), _stop).ConfigureAwait(false); // reads DSFs: off the caller's thread
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
         {
@@ -147,13 +140,6 @@ internal sealed class SimBriefSession
         {
             Log.Warning($"SimBrief: departure prefetch failed ({ex.Message})");
         }
-    }
-
-    /// <summary>"EDDH → EGPH" (or the departure alone).</summary>
-    internal static string Describe(FlightPlan plan)
-    {
-        string from = plan.Origin.Icao.Length > 0 ? plan.Origin.Icao : "your departure";
-        return plan.Destination is { Icao.Length: > 0 } to ? $"{from} → {to.Icao}" : from;
     }
 
     /// <summary>", generated 12 min ago" when the plan says when.</summary>

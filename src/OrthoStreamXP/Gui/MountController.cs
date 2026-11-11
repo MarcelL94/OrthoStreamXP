@@ -178,7 +178,7 @@ internal sealed class MountController : ObservableObject
                 session.Dispose();
                 // The streamed textures' RAM copies were large arrays. An ordinary collection frees them but keeps the
                 // memory for reuse (3.9 GB stayed with an idle window); an aggressive one gives it back to Windows.
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+                PrewarmMemory.GiveBack();
             }).ConfigureAwait(true);
             Log.Step("OrthoStreamXP stopped: the photo scenery is no longer shown to X-Plane");
         }

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using OrthoStreamXP.Setup;
 
 namespace OrthoStreamXP.Scenery;
 
@@ -8,12 +9,15 @@ namespace OrthoStreamXP.Scenery;
 /// textures it queued X-Plane loaded later (the hit rate). Logged when streaming stops; the numbers for the PR (R12)
 /// and for the download budget (R4). Thread-safe: builds report from the build threads.
 /// </summary>
-internal sealed class PrefetchMeter(string phase)
+/// <param name="ground">A phase of the ground pre-warm (dropped on the takeoff roll), not the departure.</param>
+internal sealed class PrefetchMeter(string phase, bool ground)
 {
     private readonly ConcurrentDictionary<string, byte> _queued = new(), _loaded = new();
     private long _had, _started, _built, _failed, _tiles, _bytes, _buildTicks;
 
     public string Phase { get; } = phase;
+
+    public bool Ground { get; } = ground;
 
     /// <summary>The session's download budget its builds spend from; null when there is none.</summary>
     public PrefetchBudget? Budget { get; set; }
@@ -64,10 +68,9 @@ internal sealed class PrefetchMeter(string phase)
     public string? Summary()
     {
         if (Queued == 0 && Had == 0) return null;
-        double mb = Bytes / (1024.0 * 1024);
         string hits = Queued > 0 ? $"X-Plane loaded {Loaded} of the {Queued} queued ({100.0 * Loaded / Queued:0} %)" : "nothing queued";
         return $"SimBrief prefetch, {Phase}: {Queued} textures queued, {Had} already had what X-Plane wants; " +
-               $"{Started} builds started, {Built} built, {Failed} failed; {Tiles} tiles, {mb:0} MB downloaded; " +
+               $"{Started} builds started, {Built} built, {Failed} failed; {Tiles} tiles, {CacheInventory.FormatBytes(Bytes)} downloaded; " +
                $"{BuildTime.TotalMinutes:0.0} min of build time; {hits}";
     }
 }

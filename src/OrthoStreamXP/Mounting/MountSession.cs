@@ -32,7 +32,7 @@ internal sealed class MountSession : IDisposable
     private ColourMatcher? _colours;
     private Task? _summaryLoop, _sampleLoop;
     private HttpClient? _simBrief;
-    /// <summary>The ground pre-warm, once the flight plan is asked for; told every position X-Plane sends.</summary>
+    /// <summary>The SimBrief side (plan, departure prefetch, ground pre-warm, reload); told every position X-Plane sends.</summary>
     private volatile SimBriefSession? _simBriefSession;
     private bool _stopped;
 
@@ -231,13 +231,8 @@ internal sealed class MountSession : IDisposable
         GroundTarget[] ground = listener is null ? [] : [.. _mounts.Where(m => m.Warmer is not null)
             .Select(m => (Mount: m, Warmer: m.Warmer!))
             .Select(m => new GroundTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, m.Warmer.PrefetchGround, m.Warmer.CancelGround,
-                m.Warmer.CancelDeparture))];
-        if (ground.Length > 0)
-        {
-            var memory = new PrewarmMemory();
-            foreach (PackageMount mount in _mounts)
-                if (mount.Warmer is { } warmer) warmer.GroundDone += memory.OnGroundDone;
-        }
+                m.Warmer.CancelDeparture, m.Warmer.RunningSummary))];
+        if (ground.Length > 0) PrewarmMemory.Watch([.. _mounts.Select(m => m.Warmer).OfType<MipWarmer>()]);
         var simBrief = new SimBriefSession(ct => client.FetchAsync(user, ct), targets, ground,
             () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, _settings.SimBriefRadiusKm,
             alternate: _settings.SimBriefAlternate, stop: _summaries.Token);

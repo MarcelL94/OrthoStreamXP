@@ -11,6 +11,9 @@ internal sealed record SimBriefAnswer(FlightPlan? Plan, string? Problem)
 
     public string? Destination => Plan?.Destination?.Icao;
 
+    /// <summary>Why there is no flight plan, as the window says it.</summary>
+    public string NoPlan => $"No flight plan: {Problem?.TrimEnd('.')}.";
+
     public static SimBriefAnswer Failed(string problem) => new(null, problem);
 }
 
@@ -30,14 +33,6 @@ internal sealed class SimBriefClient(HttpClient http)
         string trimmed = user.Trim();
         string key = trimmed.Length > 0 && trimmed.All(char.IsAsciiDigit) ? "userid" : "username";
         return new Uri($"{FetcherUrl}?{key}={Uri.EscapeDataString(trimmed)}&json=1");
-    }
-
-    /// <summary>The latest flight plan, or null with the reason logged.</summary>
-    public async Task<FlightPlan?> LatestPlanAsync(string user, CancellationToken ct)
-    {
-        SimBriefAnswer answer = await FetchAsync(user, ct).ConfigureAwait(false);
-        if (answer.Problem is { } problem) Log.Warning($"SimBrief: {problem}");
-        return answer.Plan;
     }
 
     /// <summary>

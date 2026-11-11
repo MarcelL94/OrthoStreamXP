@@ -191,8 +191,7 @@ public sealed class GroundPrewarmTests : IDisposable
     {
         var plan = Task.FromResult<FlightPlan?>(new FlightPlan(Eddv, Eddf, null, []));
         var t0 = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
-        CameraReport At(double seconds, double kt) =>
-            new(Eddv.Lat, Eddv.Lon, 3, null, kt > 0 ? new Motion(kt / 1.943844, 270) : null, false, t0.AddSeconds(seconds));
+        CameraReport At(double seconds, double kt) => Parked(t0.AddSeconds(seconds), kt);
 
         // Taxied out at once: the pre-warm never started, the departure's requests still go.
         int ground = 0, departure = 0;
@@ -237,7 +236,7 @@ public sealed class GroundPrewarmTests : IDisposable
     }
 
     private static CameraReport Parked(DateTime at, double kt = 0) =>
-        new(Eddv.Lat, Eddv.Lon, 3, null, kt > 0 ? new Motion(kt / 1.943844, 270) : null, false, at);
+        new(Eddv.Lat, Eddv.Lon, 3, null, kt > 0 ? new Motion(kt / GroundWatch.KnotsPerMps, 270) : null, false, at);
 
     [Fact]
     public async Task Stopping_streaming_while_it_queues_neither_throws_nor_queues_on()

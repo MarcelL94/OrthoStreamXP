@@ -25,6 +25,13 @@ internal sealed record FlightPlan(FlightOrigin Origin, FlightOrigin? Destination
     /// </summary>
     public static readonly TimeSpan MaxAge = TimeSpan.FromHours(6);
 
+    /// <summary>"EDDH → EGPH" (or the departure alone), as the window and the log name the flight.</summary>
+    public string Describe()
+    {
+        string from = Origin.Icao.Length > 0 ? Origin.Icao : "your departure";
+        return Destination is { Icao.Length: > 0 } to ? $"{from} → {to.Icao}" : from;
+    }
+
     /// <summary>How long ago it was generated; null when unknown.</summary>
     public TimeSpan? AgeAt(DateTimeOffset now) => Generated is { } at ? now - at : null;
 

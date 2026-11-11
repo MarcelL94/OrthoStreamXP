@@ -166,7 +166,7 @@ internal sealed class HomeViewModel : ObservableObject, IPage
 
     private async Task ReloadFlightPlanAsync()
     {
-        if (_reloading || Mount.ReloadFlightPlanAsync() is not { } reload) return;
+        if (Mount.ReloadFlightPlanAsync() is not { } reload) return;
         _reloading = true;
         RelayCommand.Refresh();
         ReloadStatus = "Asking SimBrief for your latest flight plan…";

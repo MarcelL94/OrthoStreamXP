@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using OrthoStreamXP.Textures;
+using OrthoStreamXP.Setup;
 
 namespace OrthoStreamXP.Scenery;
 
@@ -49,20 +50,27 @@ internal sealed class MipWarmer : IDisposable
     /// A texture to warm; <paramref name="Mip"/> and <paramref name="Priority"/> fixed for the flight-path and departure
     /// prefetch. <paramref name="Recheck"/>: queued again because the aircraft moved, not because X-Plane loaded it.
     /// <paramref name="Distance"/>: the order among the prefetch's own requests (from the departure, or along the route).
-    /// <paramref name="Ground"/>: the ground pre-warm's, dropped when the aircraft rolls for takeoff.
-    /// <paramref name="Departure"/>: the SimBrief departure's, chosen for the gate; dropped then too.
-    /// <paramref name="Meter"/>: the SimBrief phase that queued it (what its builds cost, see <see cref="PrefetchMeter"/>).
+    /// <paramref name="Meter"/>: the SimBrief phase that queued it (see <see cref="PrefetchMeter"/>); null for every
+    /// other request. A ground phase's (<see cref="Ground"/>) is dropped when the aircraft rolls for takeoff, and so is the
+    /// departure's (<see cref="Departure"/>): its level and priority were chosen for the gate.
     /// </summary>
     private readonly record struct Request(VirtualPath Texture, int? Mip = null, int? Priority = null, bool Recheck = false, double? Distance = null,
-        bool Ground = false, bool Departure = false, PrefetchMeter? Meter = null);
+        PrefetchMeter? Meter = null)
+    {
+        public bool Ground => Meter is { Ground: true };
 
-    /// <summary>The SimBrief prefetch's phases: the departure, then the ground pre-warm's (by <see cref="GroundPrewarm"/>'s phase).</summary>
-    private readonly PrefetchMeter _departureMeter = new("departure");
-    private readonly PrefetchMeter[] _groundMeters = [new("arrival"), new("alternate"), new("climb")];
+        public bool Departure => Meter is { Ground: false };
+    }
+
+    /// <summary>The SimBrief prefetch's phases: the departure, then the ground pre-warm's (index = its phase + 1).</summary>
+    private readonly PrefetchMeter[] _phases =
+        [new("departure", ground: false), new("arrival", ground: true), new("alternate", ground: true), new("climb", ground: true)];
+    /// <summary>The SimBrief prefetch queued something: X-Plane's loads are checked against it (the hit rate).</summary>
+    private volatile bool _prefetched;
     /// <summary>The ground pre-warm's builds running now (for the takeoff roll's log line, H3).</summary>
     private int _groundRunning;
     private PrefetchBudget? _budget;
-    /// <summary>The budget ran out and this package's SimBrief requests were dropped.</summary>
+    /// <summary>The budget ran out and this package's SimBrief requests were dropped (once).</summary>
     private bool _budgetSpent;
     /// <summary>Passes of <see cref="StartWhatFits"/> and their longest time since the last log (H2).</summary>
     private int _passes;
@@ -126,8 +134,8 @@ internal sealed class MipWarmer : IDisposable
 
     private void OnEntryAdded(TextureCatalog.Entry entry)
     {
-        _departureMeter.NoteLoaded(entry.Texture);
-        foreach (PrefetchMeter meter in _groundMeters) meter.NoteLoaded(entry.Texture);
+        if (_prefetched)
+            foreach (PrefetchMeter meter in _phases) meter.NoteLoaded(entry.Texture);
         Add(new Request(entry.Texture));
     }
 
@@ -135,12 +143,11 @@ internal sealed class MipWarmer : IDisposable
     public void UseBudget(PrefetchBudget budget)
     {
         _budget = budget;
-        _departureMeter.Budget = budget;
-        foreach (PrefetchMeter meter in _groundMeters) meter.Budget = budget;
+        foreach (PrefetchMeter meter in _phases) meter.Budget = budget;
     }
 
     /// <summary>The SimBrief prefetch's phases this session, in their order.</summary>
-    public IReadOnlyList<PrefetchMeter> Phases => [_departureMeter, .. _groundMeters];
+    public IReadOnlyList<PrefetchMeter> Phases => _phases;
 
     /// <summary>A new position: what every loaded texture will need has changed.</summary>
     private void OnMoved(CameraReport camera)
@@ -187,23 +194,29 @@ internal sealed class MipWarmer : IDisposable
     public (int Queued, int Had) PrefetchGround(IReadOnlyList<VirtualPath> textures, Func<double, double, (double DistanceM, double Order)> place, int phase) =>
         PrefetchPlaced(textures, place, phase);
 
-    /// <summary>Drops the ground pre-warm's requests still waiting (the aircraft rolls for takeoff); returns how many.</summary>
+    /// <summary>Drops the ground pre-warm's requests still waiting (the takeoff roll, a newer plan); returns how many.</summary>
     public int CancelGround()
     {
         int dropped = Drop(static r => r.Ground);
-        if (dropped > 0) _groundPending = false; // rolling: no compaction now
-        Log.Info($"Load-ahead at the takeoff roll: {Volatile.Read(ref _running[(int)BuildKind.Heavy])} detailed, " +
-                 $"{Volatile.Read(ref _running[(int)BuildKind.Small])} small and {Volatile.Read(ref _running[(int)BuildKind.Base])} base builds running, " +
-                 $"{Volatile.Read(ref _groundRunning)} of them the ground pre-warm's; {dropped} of its requests still waiting dropped");
+        if (dropped > 0) _groundPending = false; // not all built: nothing to give back for
         return dropped;
     }
+
+    /// <summary>H3, for the takeoff roll's log line: the builds running now, by kind, and how many are the ground pre-warm's.</summary>
+    public string RunningSummary() =>
+        $"{Volatile.Read(ref _running[(int)BuildKind.Heavy])} detailed, {Volatile.Read(ref _running[(int)BuildKind.Small])} small and " +
+        $"{Volatile.Read(ref _running[(int)BuildKind.Base])} base builds running, {Volatile.Read(ref _groundRunning)} of them the ground pre-warm's";
+
+    /// <summary>The ground pre-warm queued work that has not all been built yet.</summary>
+    public bool GroundPending => _groundPending;
 
     /// <summary>Raises <see cref="GroundDone"/> when the ground pre-warm's work is all built (called after each pass).</summary>
     internal void CheckGroundDone()
     {
-        if (!_groundPending || GroundWaiting > 0) return;
+        if (!_groundPending) return;
         for (int kind = 0; kind < _running.Length; kind++)
-            if (Volatile.Read(ref _running[kind]) > 0) return;
+            if (Volatile.Read(ref _running[kind]) > 0) return; // the cheap check first: while it builds, this is the answer
+        if (GroundWaiting > 0) return;
         _groundPending = false;
         GroundDone?.Invoke();
     }
@@ -216,13 +229,14 @@ internal sealed class MipWarmer : IDisposable
 
     private int Drop(Func<Request, bool> which)
     {
-        int dropped;
+        int dropped = 0;
         lock (_gate)
-        {
-            string[] keys = [.. _waiting.Where(w => which(w.Value)).Select(w => w.Key)];
-            foreach (string key in keys) _waiting.Remove(key);
-            dropped = keys.Length;
-        }
+            foreach (var (key, request) in _waiting)
+                if (which(request))
+                {
+                    _waiting.Remove(key); // allowed while enumerating a Dictionary
+                    dropped++;
+                }
         Wake();
         return dropped;
     }
@@ -240,7 +254,7 @@ internal sealed class MipWarmer : IDisposable
     {
         var requests = new List<Request>(textures.Count);
         int had = 0;
-        PrefetchMeter meter = phase is int which ? _groundMeters[which] : _departureMeter;
+        PrefetchMeter meter = _phases[phase is int which ? which + 1 : 0];
         if (_budget is { Exhausted: true }) return (0, 0); // spent: left to load-ahead
         foreach (VirtualPath texture in textures)
         {
@@ -262,20 +276,21 @@ internal sealed class MipWarmer : IDisposable
             int priority = phase is int p ? GroundPriority(p)
                 : mip >= Coarsest(t) ? FetchPriority.Warm
                 : Math.Max(FetchPriority.Warm, PriorityOf(t, wanted));
-            requests.Add(new Request(texture, mip, priority, Distance: order, Ground: phase is not null, Departure: phase is null, Meter: meter));
+            requests.Add(new Request(texture, mip, priority, Distance: order, Meter: meter));
         }
-        int queued = 0;
+        var queued = new List<VirtualPath>(requests.Count);
         lock (_gate)
             foreach (Request request in requests)
             {
-                if (request.Ground && !AddOrOutrank(request)) continue;
                 if (!request.Ground) _waiting[request.Texture.Key] = request;
-                meter.NoteQueued(request.Texture);
-                queued++;
+                else if (!AddOrOutrank(request)) continue;
+                queued.Add(request.Texture);
             }
-        if (phase is not null && queued > 0) _groundPending = true;
+        foreach (VirtualPath texture in queued) meter.NoteQueued(texture); // off the gate: X-Plane's loads wait on it
+        if (queued.Count > 0) _prefetched = true;
+        if (meter.Ground && queued.Count > 0) _groundPending = true;
         Wake();
-        return (queued, had);
+        return (queued.Count, had);
     }
 
     /// <summary>
@@ -398,11 +413,6 @@ internal sealed class MipWarmer : IDisposable
                 continue;
             }
             if (_stepping.ContainsKey(request.Texture.Key)) continue; // its base tile is on the way
-            if (request.Meter is not null && _budgetSpent)
-            {
-                Remove(request); // queued in the moment the budget ran out
-                continue;
-            }
             BuildKind kind = KindOf(t.Texture, t.Mip);
             if (Full(kind)) continue;
             if (_streamer.RealFrom(t.Texture) <= t.Mip)
@@ -454,7 +464,7 @@ internal sealed class MipWarmer : IDisposable
         int dropped = Drop(static r => r.Meter is not null);
         if (dropped > 0) _groundPending = false; // not all built: nothing to give back for
         if (budget.FirstToReport())
-            Log.Info($"SimBrief prefetch: the download budget of {budget.LimitBytes / (1024 * 1024)} MB is used up " +
+            Log.Info($"SimBrief prefetch: the download budget of {CacheInventory.FormatBytes(budget.LimitBytes)} is used up " +
                      $"(simbrief-max-mb); {dropped} textures still waiting are left to load-ahead");
     }
 

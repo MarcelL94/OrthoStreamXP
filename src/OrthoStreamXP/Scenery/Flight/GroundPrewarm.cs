@@ -36,7 +36,6 @@ internal sealed class GroundWatch(double departureLat, double departureLon)
             case State.Running:
                 if (speed <= RollingKt) return GroundDecision.None;
                 _state = State.Done;
-                _rolled = true;
                 return GroundDecision.Stop;
             case State.Waiting when !_rolled && !inferred && speed > RollingKt:
                 // Not parked long enough to start (or not at the departure): the roll still ends the departure's requests.
@@ -65,9 +64,10 @@ internal sealed class GroundWatch(double departureLat, double departureLon)
 /// <param name="Prefetch">Queues textures placed by (distance X-Plane will see them from, order) at a phase (<see cref="MipWarmer.PrefetchGround"/>).</param>
 /// <param name="Cancel">Drops the ground pre-warm's textures still waiting; returns how many.</param>
 /// <param name="CancelDeparture">Drops the SimBrief departure's textures still waiting; returns how many.</param>
+/// <param name="Running">The builds running now, for the takeoff roll's log line (<see cref="MipWarmer.RunningSummary"/>).</param>
 internal sealed record GroundTarget(string Name, string Source,
     Func<IReadOnlyList<VirtualPath>, Func<double, double, (double DistanceM, double Order)>, int, (int Queued, int Had)> Prefetch,
-    Func<int> Cancel, Func<int> CancelDeparture);
+    Func<int> Cancel, Func<int> CancelDeparture, Func<string>? Running = null);
 
 /// <summary>
 /// The ground pre-warm: while the aircraft stands at the departure, the scenery of the rest of the flight is built into
@@ -137,7 +137,7 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
                 Cancel();
                 break;
             case GroundDecision.Rolled:
-                int dropped = targets.Sum(t => t.CancelDeparture());
+                int dropped = DropDeparture();
                 Log.Info($"SimBrief: the aircraft is rolling for takeoff; {dropped} departure textures still waiting were dropped, load-ahead takes over");
                 break;
         }
@@ -173,7 +173,7 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
         }
         if (!_stopped && generation == _generation) return;
         // The aircraft rolled (or a newer plan came) while it was being queued: what went in after the cancel goes too.
-        int late = targets.Sum(t => t.Cancel());
+        int late = DropGround();
         if (late > 0) Log.Info($"Ground pre-warm: {late} more textures queued during the takeoff roll were dropped");
     }
 
@@ -257,17 +257,25 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
     {
         double km = Geo.DistanceM(flight.Origin.Lat, flight.Origin.Lon, camera.Lat, camera.Lon) / 1000;
         if (km <= FlightPlan.NearDepartureKm) return;
-        int dropped = targets.Sum(t => t.CancelDeparture());
+        int dropped = DropDeparture();
         Log.Info($"SimBrief: the aircraft is {km:0} km from the flight plan's departure {Name(flight.Origin)}, so the plan is not this flight's; " +
                  $"{dropped} departure textures still waiting were dropped");
     }
 
     private void Cancel()
     {
-        int dropped = targets.Sum(t => t.Cancel()), departure = targets.Sum(t => t.CancelDeparture());
+        foreach (GroundTarget target in targets)
+            if (target.Running is { } running) Log.Info($"Load-ahead at the takeoff roll: {running()} ({target.Name})");
+        int dropped = DropGround(), departure = DropDeparture();
         Log.Info($"Ground pre-warm: the aircraft is rolling for takeoff; {dropped} textures still waiting were dropped " +
                  $"(and {departure} of the departure), load-ahead takes over");
     }
+
+    /// <summary>Drops the ground pre-warm's textures still waiting in every package; returns how many.</summary>
+    public int DropGround() => targets.Sum(t => t.Cancel());
+
+    /// <summary>Drops the SimBrief departure's textures still waiting in every package; returns how many.</summary>
+    public int DropDeparture() => targets.Sum(t => t.CancelDeparture());
 
     private static string Name(FlightOrigin airport) => airport.Icao.Length > 0 ? airport.Icao : $"{airport.Lat:F3}, {airport.Lon:F3}";
 }

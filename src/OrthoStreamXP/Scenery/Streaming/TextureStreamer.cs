@@ -499,6 +499,7 @@ internal sealed class TextureStreamer : IDisposable
         long started = Stopwatch.GetTimestamp();
         bool detailed = k < t.BaseMip;
         var stats = new TileStats();
+        bool built = false;
         try
         {
             long weight = BuildWeight(t.Layout.SizeOf(k)), tiles = BuildTiles(t.Name, t.ZoomFor(k));
@@ -542,12 +543,11 @@ internal sealed class TextureStreamer : IDisposable
                 Log.Detail($"Streamed {t.Path.Name} levels {k}-{t.Layout.Levels - 1} ({t.Layout.SizeOf(k)} px) from zoom {zoom}: " +
                          $"{stats.Misses} tiles downloaded, {Stopwatch.GetElapsedTime(started).TotalSeconds:F1} s ({(byRead ? "X-Plane read" : "ahead")})");
             TrimIfNeeded();
-            meter?.NoteBuild(true, stats.Misses, Interlocked.Read(ref stats.Bytes), Stopwatch.GetElapsedTime(started));
+            built = true;
             return true;
         }
         catch (Exception ex)
         {
-            meter?.NoteBuild(false, stats.Misses, Interlocked.Read(ref stats.Bytes), Stopwatch.GetElapsedTime(started));
             Interlocked.Increment(ref _failedBuilds);
             lock (t.Gate) t.FailedAt = Stopwatch.GetTimestamp();
             Log.Warning($"Could not stream {t.Path.Display} levels {k}+ from zoom {t.ZoomFor(k)}: {ex.Message}");
@@ -556,6 +556,7 @@ internal sealed class TextureStreamer : IDisposable
         finally
         {
             lock (t.Gate) t.Builds.Remove(k);
+            meter?.NoteBuild(built, stats.Misses, Interlocked.Read(ref stats.Bytes), Stopwatch.GetElapsedTime(started));
         }
     }
 

@@ -17,19 +17,18 @@ internal sealed record DepartureTarget(string Name, string Source, Func<VirtualP
 /// otherwise (or when the package's DSFs cannot be read) the textures within <c>radiusKm</c> at full detail. What
 /// the cache has already is left alone; X-Plane's own reads still come first in the download queue.
 /// </summary>
-/// <param name="plan">The latest flight plan, or null when there is none.</param>
 /// <param name="aircraft">Where the aircraft is now, when X-Plane has sent a position.</param>
 /// <param name="clock">The time now, for the plan's age (<see cref="FlightPlan.MaxAge"/>); the system's when null.</param>
-internal sealed class DeparturePrefetch(Func<CancellationToken, Task<FlightPlan?>> plan, Func<(double Lat, double Lon)?> aircraft,
-    IReadOnlyList<DepartureTarget> targets, double radiusKm, TimeProvider? clock = null)
+internal sealed class DeparturePrefetch(Func<(double Lat, double Lon)?> aircraft, IReadOnlyList<DepartureTarget> targets, double radiusKm,
+    TimeProvider? clock = null)
 {
     /// <summary>The most textures queued per package: a 10 km circle holds a few hundred ZL18 textures at most.</summary>
     public const int MaxTextures = 600;
 
-    /// <summary>Queues the departure textures the cache does not have; returns how many were queued.</summary>
-    public async Task<int> RunAsync(CancellationToken ct)
+    /// <summary>Queues the departure textures of <paramref name="flight"/> the cache does not have; returns how many were queued.</summary>
+    public int Run(FlightPlan? flight, CancellationToken ct)
     {
-        if (await plan(ct).ConfigureAwait(false) is not { } flight) return 0;
+        if (flight is null) return 0;
         FlightOrigin from = flight.Origin;
         string place = from.Icao.Length > 0 ? from.Icao : $"{from.Lat:F3}, {from.Lon:F3}";
         if (flight.AgeAt((clock ?? TimeProvider.System).GetUtcNow()) is { } age && age > FlightPlan.MaxAge)

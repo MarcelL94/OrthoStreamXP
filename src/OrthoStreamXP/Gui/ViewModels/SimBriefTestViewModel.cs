@@ -87,9 +87,8 @@ internal sealed class SimBriefTestViewModel : ObservableObject
 
     internal static string Describe(SimBriefAnswer answer)
     {
-        if (answer.Origin is not { } origin) return $"No flight plan: {answer.Problem?.TrimEnd('.')}.";
-        string from = origin.Icao.Length > 0 ? origin.Icao : "your departure";
-        string flight = answer.Destination is { Length: > 0 } to ? $"{from} → {to}" : from;
-        return $"Connected. Your latest flight plan is {flight}: its textures around {from} will be built when streaming starts.";
+        if (answer.Plan is not { } plan) return answer.NoPlan;
+        string from = plan.Origin.Icao.Length > 0 ? plan.Origin.Icao : "your departure";
+        return $"Connected. Your latest flight plan is {plan.Describe()}: its textures around {from} will be built when streaming starts.";
     }
 }

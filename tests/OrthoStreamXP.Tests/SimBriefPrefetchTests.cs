@@ -39,7 +39,7 @@ public sealed class SimBriefPrefetchTests : IDisposable
     {
         using var handler = new StubHandler(status, body);
         using var http = new HttpClient(handler);
-        FlightOrigin? origin = (await new SimBriefClient(http).LatestPlanAsync(user, TestContext.Current.CancellationToken))?.Origin;
+        FlightOrigin? origin = (await new SimBriefClient(http).FetchAsync(user, TestContext.Current.CancellationToken)).Origin;
         return (origin, handler.Asked);
     }
 
@@ -181,8 +181,7 @@ public sealed class SimBriefPrefetchTests : IDisposable
 
     private static readonly TimeProvider Clock = new FixedClock(Now);
 
-    private static Func<CancellationToken, Task<FlightPlan?>> PlanFrom(FlightOrigin origin, DateTimeOffset? generated = null) =>
-        _ => Task.FromResult<FlightPlan?>(new FlightPlan(origin, null, null, [], generated));
+    private static FlightPlan PlanFrom(FlightOrigin origin, DateTimeOffset? generated = null) => new(origin, null, null, [], generated);
 
     private async Task<(int Queued, List<VirtualPath> Prefetched)> Run(Func<VirtualPath, bool> isCached, FlightOrigin? origin = null,
         (double, double)? aircraft = null, DateTimeOffset? generated = null)
@@ -194,8 +193,8 @@ public sealed class SimBriefPrefetchTests : IDisposable
             prefetched.AddRange(textures);
             return textures.Count;
         });
-        var prefetch = new DeparturePrefetch(PlanFrom(origin ?? new FlightOrigin("EDDM", Lat, Lon), generated), () => aircraft, [target], radiusKm: 10, Clock);
-        return (await prefetch.RunAsync(TestContext.Current.CancellationToken), prefetched);
+        var prefetch = new DeparturePrefetch(() => aircraft, [target], radiusKm: 10, Clock);
+        return (prefetch.Run(PlanFrom(origin ?? new FlightOrigin("EDDM", Lat, Lon), generated), TestContext.Current.CancellationToken), prefetched);
     }
 
     [Fact]
@@ -352,20 +351,20 @@ public sealed class SimBriefPrefetchTests : IDisposable
 
         Assert.StartsWith("Loaded EDDM → EGLL", await session.ReloadAsync(), StringComparison.Ordinal);
         Assert.NotEmpty(departure);
-        Assert.Equal("EDDM", SimBriefSession.Describe(new FlightPlan(Eddm, null, null, []))); // no destination: the departure alone
+        Assert.Equal("EDDM", new FlightPlan(Eddm, null, null, []).Describe()); // no destination: the departure alone
     }
 
     [Fact]
-    public async Task No_flight_plan_queues_nothing()
+    public void No_flight_plan_queues_nothing()
     {
-        var prefetch = new DeparturePrefetch(_ => Task.FromResult<FlightPlan?>(null), () => null,
+        var prefetch = new DeparturePrefetch(() => null,
             [new DepartureTarget("pkg", Package(AtAirport), _ => false, _ => throw new InvalidOperationException("nothing to queue"))], radiusKm: 10);
 
-        Assert.Equal(0, await prefetch.RunAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(0, prefetch.Run(null, TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task With_streaming_the_whole_area_XPlane_loads_is_queued_and_without_its_DSFs_the_circle()
+    public void With_streaming_the_whole_area_XPlane_loads_is_queued_and_without_its_DSFs_the_circle()
     {
         string package = Package(AtAirport, Around, FarAway);
         _tree.WriteBytes("pkg/Earth nav data/+40+010/+48+011.dsf", SceneryAreaTests.Dsf($"terrain/{AtAirport.Stem}.ter", $"terrain/{FarAway.Stem}.ter"));
@@ -375,7 +374,7 @@ public sealed class SimBriefPrefetchTests : IDisposable
             (textures, _, _) => { area.AddRange(textures); return (textures.Count - 1, 1); });
         CancellationToken ct = TestContext.Current.CancellationToken;
 
-        int queued = await new DeparturePrefetch(PlanFrom(new FlightOrigin("EDDM", Lat, Lon)), () => null, [Target(package)], 10).RunAsync(ct);
+        int queued = new DeparturePrefetch(() => null, [Target(package)], 10).Run(PlanFrom(new FlightOrigin("EDDM", Lat, Lon)), ct);
         Assert.Equal(1, queued);
         Assert.Equal([AtAirport.Stem, FarAway.Stem], Stems(area)); // as the DSF names them, far ones too
         Assert.Empty(whole);
@@ -383,7 +382,7 @@ public sealed class SimBriefPrefetchTests : IDisposable
         // A package without its DSFs there (or 7-Zip ones): the textures within the radius, whole.
         Directory.Delete(_tree.PathOf("pkg/Earth nav data"), recursive: true);
         area.Clear();
-        await new DeparturePrefetch(PlanFrom(new FlightOrigin("EDDM", Lat, Lon)), () => null, [Target(package)], 10).RunAsync(ct);
+        new DeparturePrefetch(() => null, [Target(package)], 10).Run(PlanFrom(new FlightOrigin("EDDM", Lat, Lon)), ct);
         Assert.Empty(area);
         Assert.Equal([AtAirport.Stem, Around.Stem], Stems(whole));
     }
