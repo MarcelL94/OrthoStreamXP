@@ -133,13 +133,15 @@ internal sealed class SimBriefSession
                 return $"Unchanged: {flight} is still your latest flight plan{Age(plan)}.";
             }
             bool moved = old is null || !FlightPlan.SamePlace(old.Origin, plan.Origin);
+            // A stale old plan had its departure skipped: a fresh one from the same airport still needs it built.
+            bool buildDeparture = moved || old!.StaleAt(_clock.GetUtcNow());
             int ground = Ground?.DropGround() ?? 0;
             int departure = moved ? Ground?.DropDeparture() ?? 0 : 0;
             Ground?.UsePlan(plan);
             Log.Info($"SimBrief: new flight plan {flight}{Age(plan)}; the old one's textures still waiting were dropped " +
                      $"({ground} of the ground pre-warm{(moved ? $", {departure} of the departure" : "")})");
-            if (moved) await PrefetchDepartureAsync(Task.FromResult<FlightPlan?>(plan)).ConfigureAwait(false);
-            return $"Loaded {flight}{Age(plan)}." + (moved ? " Its departure is being built." : "");
+            if (buildDeparture) await PrefetchDepartureAsync(Task.FromResult<FlightPlan?>(plan)).ConfigureAwait(false);
+            return $"Loaded {flight}{Age(plan)}." + (buildDeparture ? " Its departure is being built." : "");
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
         {

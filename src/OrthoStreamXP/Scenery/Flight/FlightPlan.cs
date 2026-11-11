@@ -35,6 +35,9 @@ internal sealed record FlightPlan(FlightOrigin Origin, FlightOrigin? Destination
     /// <summary>How long ago it was generated; null when unknown.</summary>
     public TimeSpan? AgeAt(DateTimeOffset now) => Generated is { } at ? now - at : null;
 
+    /// <summary>Older than <see cref="MaxAge"/>: taken for an earlier flight, its departure is not prefetched.</summary>
+    public bool StaleAt(DateTimeOffset now) => AgeAt(now) is { } age && age > MaxAge;
+
     /// <summary>
     /// An aircraft within this of the plan's departure is at it (the ground pre-warm starts there); farther away it flies
     /// another flight and the plan is not this flight's (the departure prefetch is skipped or dropped).

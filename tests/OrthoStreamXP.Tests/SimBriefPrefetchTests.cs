@@ -323,6 +323,23 @@ public sealed class SimBriefPrefetchTests : IDisposable
     }
 
     [Fact]
+    public async Task A_fresh_plan_from_the_same_airport_as_a_stale_one_gets_its_departure_built()
+    {
+        // Mounted with yesterday's OFP (departure skipped as too old), then a new one generated at the same airport.
+        SimBriefAnswer Dated(string id, TimeSpan age) => new(new FlightPlan(Eddm, Egll, null, [], Now - age, id), null);
+        var (session, _, departure, _) = Session(() => Task.FromResult(Dated("1", TimeSpan.FromHours(29))),
+            () => Task.FromResult(Dated("2", TimeSpan.FromMinutes(1))));
+        session.Start();
+        await session.WhenDone();
+        Assert.Empty(departure); // the stale plan's departure is not prefetched
+
+        string said = await session.ReloadAsync();
+
+        Assert.EndsWith("Its departure is being built.", said, StringComparison.Ordinal);
+        Assert.Equal([AtAirport.Stem, Around.Stem], Stems(departure));
+    }
+
+    [Fact]
     public async Task Two_presses_during_one_reload_send_one_request()
     {
         var held = new TaskCompletionSource<SimBriefAnswer>(TaskCreationOptions.RunContinuationsAsynchronously);
