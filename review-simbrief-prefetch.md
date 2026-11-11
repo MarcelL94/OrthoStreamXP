@@ -105,7 +105,11 @@ Never claim a test passed without running it.
         literal left alone); L5 `using`s; L11 the test button logs and shows an unexpected failure. Left: L4 (the help
         texts already say "or the numeric Pilot ID"; D1 covers the rest), L8 (note only), L9 (the radius is ini-only, 1-50),
         L10 (branch scope, not for the PR), L12 (a tooltip line, with D1/D2).
-18. [ ] **D1-D4**: help texts, the Home switch wording, the docs page and the release-notes entry.
+18. [x] **D1-D4**: help texts, the Home switch wording, the docs page and the release-notes entry.
+        D1: one description in the Settings field, the ini help, the Setup step and the example ini. D2: "Build my SimBrief
+        flight's scenery ahead", tooltip with Reload and L12. D3: `docs/simbrief.md` (nav, contents, PDF list, README
+        feature, the setup's step 6). D4: privacy section on that page, and the release-notes draft below (no file: the
+        version is the maintainer's). The PDF (`docs/OrthoStreamXP-UserGuide.pdf`) was not rebuilt: needs pandoc.
 
 Nothing in the flight hurt X-Plane's reads (0 near waits, 1 middle wait of 4 ms, 3 far flat reads unrelated to the
 prefetch), so no F item jumps ahead of H1. F6 (climb by height): decided against, the climb keeps ending at TOC. F9 is load-ahead, not
@@ -547,6 +551,18 @@ also decide the default budget (R4) and whether the alternate is worth keeping (
   tooltip.
 
 ## Docs and UX consistency
+
+Release-notes draft (D4), for `release-notes/v<next>.md` when the maintainer picks the version:
+
+```markdown
+## What's new
+
+- **SimBrief flights ready sooner.** Enter your SimBrief username (in the setup or in Settings › Other) and OrthoStreamXP builds your flight's scenery ahead: the departure airport while X-Plane is still loading, and the arrival and the climb while you sit at the gate. Turn it off for a session on Home. Generated your flight plan after starting? Press **Reload SimBrief flight plan** on Home. See the [SimBrief page](https://flysimdev.github.io/OrthoStreamXP/simbrief/) of the user guide.
+
+## Good to know
+
+- SimBrief is only asked when streaming starts and when you press **Reload SimBrief flight plan**; only your username goes to simbrief.com. The prefetch downloads at most 1000 MB per session (`simbrief-max-mb`), and the alternate airport is built only with `simbrief-alternate = on`.
+```
 
 - **D1. Help texts describe only the departure.** The Settings field (`SettingsViewModel.cs:66`), the ini help
   (`SettingsOptions.cs:42`), the Setup step (`SetupView.xaml:285`) and `orthostreamxp.example.ini` all describe the

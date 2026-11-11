@@ -64,7 +64,7 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
                 "Added when OrthoStreamXP starts X-Plane (Start and fly), such as --allow_reshade. Takes effect the next time X-Plane is started.",
                 FieldKind.Text, placeholder: "--allow_reshade"),
             Field("simbrief-user", "SimBrief username",
-                "Your SimBrief username or Pilot ID. When streaming starts, the photos around the departure airport of your latest flight plan are built before X-Plane loads them; those already in the cache are skipped. Leave it empty to turn this off.",
+                "Your SimBrief username or Pilot ID. When streaming starts, the photos around the departure airport of your latest SimBrief flight plan are built before X-Plane loads them; while the aircraft stands at the gate, the arrival and the climb follow. Photos already in the cache are skipped. Leave it empty to turn this off.",
                 FieldKind.Text, placeholder: "username or Pilot ID"),
         ];
         ConnectionTest = new ConnectionTestViewModel(

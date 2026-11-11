@@ -284,7 +284,7 @@
                     </StackPanel.Style>
                     <TextBlock Text="Do you plan your flights with SimBrief?" Style="{StaticResource Heading}" />
                     <TextBlock Style="{StaticResource Secondary}" Margin="0,0,0,16"
-                               Text="Optional. With your SimBrief username, OrthoStreamXP reads your latest flight plan when streaming starts and builds the photos around the departure airport while X-Plane is still loading, so the view at the gate is sharp sooner. Photos already in the cache are not downloaded again. Leave it empty to skip this; you can change it later in Settings." />
+                               Text="Optional. With your SimBrief username, OrthoStreamXP reads your latest flight plan: when streaming starts, the photos around the departure airport are built while X-Plane is still loading, so the view at the gate is sharp sooner; while the aircraft stands at the gate, the arrival and the climb follow. Photos already in the cache are not downloaded again. Leave it empty to skip this; you can change it later in Settings." />
                     <TextBox Text="{Binding SimBriefUser, UpdateSourceTrigger=PropertyChanged, Delay=300}" AutomationProperties.Name="SimBrief username or Pilot ID" />
                     <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
                                Text="Your SimBrief username, or your Pilot ID (the number in your SimBrief account settings)." />
