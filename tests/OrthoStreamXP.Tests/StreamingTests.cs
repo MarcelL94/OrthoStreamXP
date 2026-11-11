@@ -521,6 +521,49 @@ public sealed class StreamingTests : IDisposable
     }
 
     [Fact]
+    public void A_texture_XPlane_loads_while_the_ground_prewarm_waits_for_it_gets_load_aheads_request()
+    {
+        Setup s = Streaming();
+        var catalog = new TextureCatalog();
+        using var warmer = new MipWarmer(catalog, s.Streamer, s.View, heavy: 2);
+        StreamedTexture here = s.Streamer.Get(Texture())!;
+        (double, double) Beside(double lat, double lon) => (0, 0);
+        s.View.Update(new CameraReport(here.Lat, here.Lon, 2, null, null, false, DateTime.UtcNow)); // parked beside it
+
+        Assert.Equal((1, 0), warmer.PrefetchGround([Texture()], Beside, GroundPrewarm.Route));
+        Assert.True(warmer.WaitingFor(Texture())!.Value.Ground);
+
+        catalog.AddTerrain(VirtualPath.Of("terrain", Stem + ".ter")); // X-Plane loads it
+        var request = warmer.WaitingFor(Texture())!.Value;
+        Assert.False(request.Ground);
+        Assert.Equal((0, FetchPriority.NearWarm), (request.Mip, request.Priority)); // full detail beside the camera, near priority
+        Assert.Equal((0, 0), warmer.PrefetchGround([Texture()], Beside, GroundPrewarm.Route)); // and the ground pre-warm doesn't take it back
+
+        Assert.Equal(0, warmer.CancelGround()); // the takeoff roll keeps it
+        Assert.NotNull(warmer.WaitingFor(Texture()));
+    }
+
+    [Fact]
+    public void A_move_of_the_camera_outranks_a_waiting_ground_request_for_a_loaded_texture()
+    {
+        Setup s = Streaming();
+        var catalog = new TextureCatalog();
+        catalog.AddTerrain(VirtualPath.Of("terrain", Stem + ".ter")); // loaded before the warmer listens: only a move queues it
+        using var warmer = new MipWarmer(catalog, s.Streamer, s.View, heavy: 2);
+        StreamedTexture here = s.Streamer.Get(Texture())!;
+        (double, double) Beside(double lat, double lon) => (0, 0);
+        Assert.Equal((1, 0), warmer.PrefetchGround([Texture()], Beside, GroundPrewarm.Route));
+        Assert.True(warmer.WaitingFor(Texture())!.Value.Ground);
+
+        s.View.Update(new CameraReport(here.Lat, here.Lon, 2, null, null, false, DateTime.UtcNow)); // the first position: OnMoved
+        var request = warmer.WaitingFor(Texture())!.Value;
+        Assert.False(request.Ground);
+        Assert.Equal(FetchPriority.NearWarm, request.Priority);
+        Assert.Equal(0, warmer.CancelGround());
+        Assert.NotNull(warmer.WaitingFor(Texture()));
+    }
+
+    [Fact]
     public async Task A_whole_texture_prefetched_ahead_of_XPlane_gets_its_base_tile_too()
     {
         // The SimBrief departure: fetched whole before X-Plane loads it, then skipped by load-ahead as complete. Without

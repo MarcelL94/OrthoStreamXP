@@ -105,7 +105,7 @@ internal sealed class MipWarmer : IDisposable
     {
         lock (_gate)
             foreach (TextureCatalog.Entry entry in _catalog.Entries)
-                _waiting.TryAdd(entry.Texture.Key, new Request(entry.Texture, Recheck: true));
+                AddOrOutrank(new Request(entry.Texture, Recheck: true));
         Wake();
     }
 
@@ -193,7 +193,11 @@ internal sealed class MipWarmer : IDisposable
         lock (_gate)
             foreach (Request request in requests)
             {
-                if (request.Ground && _waiting.ContainsKey(request.Texture.Key)) continue;
+                if (request.Ground)
+                {
+                    if (AddOrOutrank(request)) queued++;
+                    continue;
+                }
                 _waiting[request.Texture.Key] = request;
                 queued++;
             }
@@ -221,8 +225,30 @@ internal sealed class MipWarmer : IDisposable
 
     private void Add(Request request)
     {
-        lock (_gate) _waiting.TryAdd(request.Texture.Key, request);
+        lock (_gate) AddOrOutrank(request);
         Wake();
+    }
+
+    /// <summary>
+    /// Queues <paramref name="request"/> unless the texture waits already. A waiting ground pre-warm request gives way to
+    /// any other one: it ranks below everything, and <see cref="CancelGround"/> would drop it on the takeoff roll,
+    /// taking X-Plane's own load-ahead request with it. A ground request never replaces a waiting one. Under the gate.
+    /// </summary>
+    private bool AddOrOutrank(Request request)
+    {
+        string key = request.Texture.Key;
+        if (_waiting.TryGetValue(key, out Request existing) && (request.Ground || !existing.Ground)) return false;
+        _waiting[key] = request;
+        return true;
+    }
+
+    /// <summary>The level and priority the request waiting for <paramref name="texture"/> fetches now; null when none waits.</summary>
+    internal (int Mip, int Priority, bool Ground)? WaitingFor(VirtualPath texture)
+    {
+        Request request;
+        lock (_gate)
+            if (!_waiting.TryGetValue(texture.Key, out request)) return null;
+        return Target(request.Texture, request.Mip, request.Priority, request.Distance) is { } t ? (t.Mip, t.Priority, request.Ground) : null;
     }
 
     private void Wake()
