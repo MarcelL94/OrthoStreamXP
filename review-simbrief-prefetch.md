@@ -70,9 +70,15 @@ Never claim a test passed without running it.
        `orthostreamxp/0.2` before; they now send the real version (as the mesh downloads already did).
 9. [x] **R8 test**: problems a `SimBriefAnswer` carries never contain the username or Pilot ID.
        Plus a scrub in `FetchAsync`: SimBrief's own error text or an exception's message could have echoed it.
-10. [ ] **R12 + measurement logging**: the per-phase summary at mount stop (queued, built, cached, tiles and MB, build
+10. [x] **R12 + measurement logging**: the per-phase summary at mount stop (queued, built, cached, tiles and MB, build
         time, hit rate), plus the H2/H3 measurements from "What to log" (F8: today the prefetch's share of the 7.8 GB
         is unknown). Needed before step 11 can be decided.
+        Done: `PrefetchMeter` per phase (`MipWarmer.Phases`), logged per package at stop as "SimBrief prefetch,
+        <phase>: ..." (queued, had, builds started/built/failed, tiles and MB downloaded, build time, X-Plane loaded N of
+        the queued). The bytes come from the builds' own `TileStats` (the R4 counter). H2: every 100 passes while the
+        ground pre-warm has work, "Load-ahead: N textures waiting; the last pass took X ms, the longest Y ms". H3: at
+        the roll, "Load-ahead at the takeoff roll: N detailed, N small and N base builds running, M of them the ground
+        pre-warm's". Near-read waits after takeoff: the existing 2-min streaming summaries already show them.
 11. [ ] **H2 / H3**: the EDDV → ENGM flight did not show them (F2, F7). Fix them only if the new logging shows them on
         a cold or slow run. Otherwise leave them as measured-but-fine and note that here.
 12. [ ] **R4**: the per-session download budget for the prefetch (setting, counter in the downloader, log when used up).
@@ -247,7 +253,7 @@ one from the fresh branch once R1 and R2 are done.
 | R9 | Fetch once per mount, plus an explicit re-fetch, no polling | Done for once per mount; **button open** (M1) | Clarified: "explicit" means a **button the user presses whenever they want**. No automatic re-fetch (not even when parked) and no polling. See M1 |
 | R10 | Short timeout, a slow SimBrief never holds up the mount | Done | 10 s, and the fetch runs in the background (L7 dropped) |
 | R11 | Stale OFP guard: near the origin and/or recent, otherwise log the skip | Done (H5) | `FlightPlan.MaxAge` (6 h, from `params.time_generated`) at mount start; the first real position > 50 km from the origin drops the departure requests (`GroundPrewarm.DropDepartureIfElsewhere`). Both log the skip |
-| R12 | Numbers in the PR: tiles and MB, build time, hit rate | **Open**, new | See below |
+| R12 | Numbers in the PR: tiles and MB, build time, hit rate | Logging done; **flights open** | Summary per phase at stop (step 10). Still to fly the 3-5 flights and put the table in the PR |
 
 ### R4. Download budget
 

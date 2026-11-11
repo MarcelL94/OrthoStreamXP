@@ -470,7 +470,7 @@ internal sealed class TextureStreamer : IDisposable
     /// Fetches real data for levels <paramref name="k"/> and smaller, unless the texture has it or a build that
     /// covers it is already running (that one is raised to <paramref name="priority"/> instead).
     /// </summary>
-    private Task<bool> StartBuild(StreamedTexture t, int k, int priority, bool byRead)
+    private Task<bool> StartBuild(StreamedTexture t, int k, int priority, bool byRead, PrefetchMeter? meter = null)
     {
         lock (t.Gate)
         {
@@ -486,16 +486,19 @@ internal sealed class TextureStreamer : IDisposable
             // Every attempt already retried each tile on every server: the next one waits a little (a connection down).
             if (t.FailedAt != 0 && Stopwatch.GetElapsedTime(t.FailedAt) < RetryAfter) return Task.FromResult(false);
             var ticket = new FetchTicket(priority);
-            Task<bool> task = Task.Run(() => BuildAsync(t, k, ticket, byRead));
+            meter?.NoteStarted();
+            Task<bool> task = Task.Run(() => BuildAsync(t, k, ticket, byRead, meter));
             t.Builds[k] = (task, ticket);
             return task;
         }
     }
 
-    private async Task<bool> BuildAsync(StreamedTexture t, int k, FetchTicket ticket, bool byRead)
+    /// <param name="meter">The prefetch phase that started it, told what it cost; null for every other build.</param>
+    private async Task<bool> BuildAsync(StreamedTexture t, int k, FetchTicket ticket, bool byRead, PrefetchMeter? meter)
     {
         long started = Stopwatch.GetTimestamp();
         bool detailed = k < t.BaseMip;
+        var stats = new TileStats();
         try
         {
             long weight = BuildWeight(t.Layout.SizeOf(k)), tiles = BuildTiles(t.Name, t.ZoomFor(k));
@@ -511,7 +514,6 @@ internal sealed class TextureStreamer : IDisposable
                 if (ahead) _ahead.Release(tiles);
                 throw;
             }
-            var stats = new TileStats();
             int zoom = t.ZoomFor(k);
             byte[] chain;
             try
@@ -540,10 +542,12 @@ internal sealed class TextureStreamer : IDisposable
                 Log.Detail($"Streamed {t.Path.Name} levels {k}-{t.Layout.Levels - 1} ({t.Layout.SizeOf(k)} px) from zoom {zoom}: " +
                          $"{stats.Misses} tiles downloaded, {Stopwatch.GetElapsedTime(started).TotalSeconds:F1} s ({(byRead ? "X-Plane read" : "ahead")})");
             TrimIfNeeded();
+            meter?.NoteBuild(true, stats.Misses, Interlocked.Read(ref stats.Bytes), Stopwatch.GetElapsedTime(started));
             return true;
         }
         catch (Exception ex)
         {
+            meter?.NoteBuild(false, stats.Misses, Interlocked.Read(ref stats.Bytes), Stopwatch.GetElapsedTime(started));
             Interlocked.Increment(ref _failedBuilds);
             lock (t.Gate) t.FailedAt = Stopwatch.GetTimestamp();
             Log.Warning($"Could not stream {t.Path.Display} levels {k}+ from zoom {t.ZoomFor(k)}: {ex.Message}");
@@ -587,11 +591,12 @@ internal sealed class TextureStreamer : IDisposable
     /// Fetches levels <paramref name="k"/> and smaller ahead of X-Plane (no wait). Returns the build, finished at
     /// once when the texture already has them, or null when the path is not a photo texture.
     /// </summary>
-    public Task<bool>? Warm(VirtualPath path, int k, int priority)
+    /// <param name="meter">The SimBrief prefetch phase asking, told what a build it starts costs.</param>
+    public Task<bool>? Warm(VirtualPath path, int k, int priority, PrefetchMeter? meter = null)
     {
         if (Get(path) is not { } t) return null;
         Interlocked.Increment(ref _warmRequests);
-        return StartBuild(t, Math.Clamp(k, 0, t.BaseMip), priority, byRead: false);
+        return StartBuild(t, Math.Clamp(k, 0, t.BaseMip), priority, byRead: false, meter);
     }
 
     private long _warmRequests;

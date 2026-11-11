@@ -335,6 +335,9 @@ internal sealed class MountSession : IDisposable
                 var (terrainCount, textureCount) = mount.Overlay.RequestCounts();
                 Log.Info($"{label}X-Plane request summary: {terrainCount} unique .ter definitions, {textureCount} unique DDS textures");
                 if (mount.Overlay.PrefetchSummary() is { } summary) Log.Info(label + summary);
+                if (mount.Warmer is { } warmer)
+                    foreach (PrefetchMeter phase in warmer.Phases)
+                        if (phase.Summary() is { } line) Log.Info(label + line);
             }
             Log.Info(_cpu.Summary());
             ReviewFlight();

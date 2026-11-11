@@ -543,6 +543,43 @@ public sealed class StreamingTests : IDisposable
     }
 
     [Fact]
+    public async Task Each_prefetch_phase_counts_its_builds_downloads_and_what_XPlane_loaded_later()
+    {
+        // R12: the numbers for the PR, per phase.
+        Setup s = Streaming();
+        var catalog = new TextureCatalog();
+        using var warmer = new MipWarmer(catalog, s.Streamer, s.View, heavy: 2);
+        const string arrivalStem = "21904_36144_BI16";
+        StreamedTexture arrival = s.Streamer.Get(Texture(arrivalStem))!;
+        (double, double) Beside(double lat, double lon) => (0, 0);
+        Assert.All(warmer.Phases, p => Assert.Null(p.Summary())); // nothing done: nothing logged
+
+        warmer.PrefetchGround([Texture(arrivalStem)], Beside, GroundPrewarm.Arrival);
+        await Until(() =>
+        {
+            warmer.StartWhatFits();
+            return s.Streamer.RealFrom(arrival) == 0 && warmer.WaitingFor(Texture(arrivalStem)) is null;
+        });
+        PrefetchMeter meter = warmer.Phases.Single(p => p.Phase == "arrival");
+        await Until(() => meter.Built == 2); // its base tile, then full detail
+        Assert.Equal((1, 2L, 0L), (meter.Queued, meter.Started, meter.Failed));
+        Assert.Equal(17, meter.Tiles); // 1 base tile + 16 at zoom 14
+        Assert.True(meter.Bytes > 0);
+        Assert.True(meter.BuildTime > TimeSpan.Zero);
+        Assert.Equal(0, meter.Loaded);
+
+        catalog.AddTerrain(VirtualPath.Of("terrain", arrivalStem + ".ter")); // X-Plane loads it on the approach
+        Assert.Equal(1, meter.Loaded);
+        Assert.Contains("X-Plane loaded 1 of the 1 queued (100 %)", meter.Summary(), StringComparison.Ordinal);
+
+        // The departure, built already: counted as had, not queued; the other phases stay silent.
+        warmer.PrefetchAround([Texture(arrivalStem)], arrival.Lat, arrival.Lon);
+        PrefetchMeter departure = warmer.Phases.Single(p => p.Phase == "departure");
+        Assert.Equal((0, 1L), (departure.Queued, departure.Had));
+        Assert.Null(warmer.Phases.Single(p => p.Phase == "climb").Summary());
+    }
+
+    [Fact]
     public void The_takeoff_roll_drops_only_the_departures_requests_still_waiting()
     {
         Setup s = Streaming();

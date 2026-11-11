@@ -50,9 +50,20 @@ internal sealed class MipWarmer : IDisposable
     /// <paramref name="Distance"/>: the order among the prefetch's own requests (from the departure, or along the route).
     /// <paramref name="Ground"/>: the ground pre-warm's, dropped when the aircraft rolls for takeoff.
     /// <paramref name="Departure"/>: the SimBrief departure's, chosen for the gate; dropped then too.
+    /// <paramref name="Meter"/>: the SimBrief phase that queued it (what its builds cost, see <see cref="PrefetchMeter"/>).
     /// </summary>
     private readonly record struct Request(VirtualPath Texture, int? Mip = null, int? Priority = null, bool Recheck = false, double? Distance = null,
-        bool Ground = false, bool Departure = false);
+        bool Ground = false, bool Departure = false, PrefetchMeter? Meter = null);
+
+    /// <summary>The SimBrief prefetch's phases: the departure, then the ground pre-warm's (by <see cref="GroundPrewarm"/>'s phase).</summary>
+    private readonly PrefetchMeter _departureMeter = new("departure");
+    private readonly PrefetchMeter[] _groundMeters = [new("arrival"), new("alternate"), new("climb")];
+    /// <summary>The ground pre-warm's builds running now (for the takeoff roll's log line, H3).</summary>
+    private int _groundRunning;
+    /// <summary>Passes of <see cref="StartWhatFits"/> and their longest time since the last log (H2).</summary>
+    private int _passes;
+    private TimeSpan _longestPass;
+    private const int PassesPerReport = 100;
 
     private readonly TextureCatalog _catalog;
     private readonly TextureStreamer _streamer;
@@ -109,7 +120,15 @@ internal sealed class MipWarmer : IDisposable
                      $"({_heavyLimit} detailed textures, {SmallInFlight} of a few tiles and {BaseInFlight} base tiles at a time)");
     }
 
-    private void OnEntryAdded(TextureCatalog.Entry entry) => Add(new Request(entry.Texture));
+    private void OnEntryAdded(TextureCatalog.Entry entry)
+    {
+        _departureMeter.NoteLoaded(entry.Texture);
+        foreach (PrefetchMeter meter in _groundMeters) meter.NoteLoaded(entry.Texture);
+        Add(new Request(entry.Texture));
+    }
+
+    /// <summary>The SimBrief prefetch's phases this session, in their order.</summary>
+    public IReadOnlyList<PrefetchMeter> Phases => [_departureMeter, .. _groundMeters];
 
     /// <summary>A new position: what every loaded texture will need has changed.</summary>
     private void OnMoved(CameraReport camera)
@@ -161,6 +180,9 @@ internal sealed class MipWarmer : IDisposable
     {
         int dropped = Drop(static r => r.Ground);
         if (dropped > 0) _groundPending = false; // rolling: no compaction now
+        Log.Info($"Load-ahead at the takeoff roll: {Volatile.Read(ref _running[(int)BuildKind.Heavy])} detailed, " +
+                 $"{Volatile.Read(ref _running[(int)BuildKind.Small])} small and {Volatile.Read(ref _running[(int)BuildKind.Base])} base builds running, " +
+                 $"{Volatile.Read(ref _groundRunning)} of them the ground pre-warm's; {dropped} of its requests still waiting dropped");
         return dropped;
     }
 
@@ -206,6 +228,7 @@ internal sealed class MipWarmer : IDisposable
     {
         var requests = new List<Request>(textures.Count);
         int had = 0;
+        PrefetchMeter meter = phase is int which ? _groundMeters[which] : _departureMeter;
         foreach (VirtualPath texture in textures)
         {
             if (_streamer.Get(texture) is not { } t) continue;
@@ -216,6 +239,7 @@ internal sealed class MipWarmer : IDisposable
             if (real <= mip)
             {
                 had++;
+                meter.NoteHad();
                 continue;
             }
             // Far ones are only their base tile: before the middle levels, as X-Plane reads far scenery first. Nothing of
@@ -225,18 +249,15 @@ internal sealed class MipWarmer : IDisposable
             int priority = phase is int p ? GroundPriority(p)
                 : mip >= Coarsest(t) ? FetchPriority.Warm
                 : Math.Max(FetchPriority.Warm, PriorityOf(t, wanted));
-            requests.Add(new Request(texture, mip, priority, Distance: order, Ground: phase is not null, Departure: phase is null));
+            requests.Add(new Request(texture, mip, priority, Distance: order, Ground: phase is not null, Departure: phase is null, Meter: meter));
         }
         int queued = 0;
         lock (_gate)
             foreach (Request request in requests)
             {
-                if (request.Ground)
-                {
-                    if (AddOrOutrank(request)) queued++;
-                    continue;
-                }
-                _waiting[request.Texture.Key] = request;
+                if (request.Ground && !AddOrOutrank(request)) continue;
+                if (!request.Ground) _waiting[request.Texture.Key] = request;
+                meter.NoteQueued(request.Texture);
                 queued++;
             }
         if (phase is not null && queued > 0) _groundPending = true;
@@ -331,7 +352,9 @@ internal sealed class MipWarmer : IDisposable
         {
             while (!stop.IsCancellationRequested)
             {
+                long pass = Stopwatch.GetTimestamp();
                 StartWhatFits();
+                NotePass(Stopwatch.GetElapsedTime(pass));
                 CheckGroundDone();
                 ReportProgress();
                 await _wake.WaitAsync(TimeSpan.FromSeconds(1), stop).ConfigureAwait(false);
@@ -369,7 +392,7 @@ internal sealed class MipWarmer : IDisposable
                 if (!request.Recheck) Interlocked.Increment(ref _alreadyHad);
                 continue;
             }
-            if (_streamer.Warm(request.Texture, t.Mip, t.Priority) is not { } build)
+            if (_streamer.Warm(request.Texture, t.Mip, t.Priority, request.Meter) is not { } build)
             {
                 Remove(request);
                 continue;
@@ -388,10 +411,13 @@ internal sealed class MipWarmer : IDisposable
             Interlocked.Increment(ref _queued);
             if (baseStep) _stepping[request.Texture.Key] = 0;
             Interlocked.Increment(ref _running[(int)kind]);
+            bool ground = request.Ground;
+            if (ground) Interlocked.Increment(ref _groundRunning);
             string key = request.Texture.Key;
             build.ContinueWith(done =>
             {
                 if (baseStep && !Succeeded(done)) Remove(request);
+                if (ground) Interlocked.Decrement(ref _groundRunning);
                 Interlocked.Decrement(ref _running[(int)kind]);
                 _stepping.TryRemove(key, out byte _);
                 Wake();
@@ -400,6 +426,22 @@ internal sealed class MipWarmer : IDisposable
     }
 
     private static bool Succeeded(Task<bool> build) => build.IsCompletedSuccessfully && build.Result;
+
+    /// <summary>
+    /// H2: while the ground pre-warm has work queued (the biggest queue), how long a pass takes ranking and probing it,
+    /// logged every <see cref="PassesPerReport"/> passes with the queue's size.
+    /// </summary>
+    private void NotePass(TimeSpan took)
+    {
+        if (!_groundPending) return;
+        if (took > _longestPass) _longestPass = took;
+        if (++_passes < PassesPerReport) return;
+        int waiting;
+        lock (_gate) waiting = _waiting.Count;
+        Log.Info($"Load-ahead: {waiting} textures waiting; the last pass took {took.TotalMilliseconds:0} ms, " +
+                 $"the longest of the last {_passes} {_longestPass.TotalMilliseconds:0} ms");
+        (_passes, _longestPass) = (0, TimeSpan.Zero);
+    }
 
     private bool Full(BuildKind kind) => Volatile.Read(ref _running[(int)kind]) >= kind switch
     {
