@@ -79,11 +79,17 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
 
     private GroundWatch? _watch;
     private volatile bool _stopped;
+    private bool _positionChecked;
 
     /// <summary>Every position X-Plane sends (from its UDP thread): starts or stops the pre-warm when the watch says so.</summary>
     public void OnCamera(CameraReport camera)
     {
         if (!plan.IsCompletedSuccessfully || plan.Result is not { } flight) return;
+        if (!camera.Inferred && !_positionChecked)
+        {
+            _positionChecked = true;
+            DropDepartureIfElsewhere(flight, camera);
+        }
         _watch ??= new GroundWatch(flight.Origin.Lat, flight.Origin.Lon);
         switch (_watch.Update(camera.Lat, camera.Lon, camera.Motion?.SpeedMps * 1.943844, camera.HeightAglM, camera.Inferred, camera.ReceivedUtc))
         {
@@ -172,6 +178,19 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
         Log.Info($"Ground pre-warm: the climb to {climb.End} ({climb.Nm:0} NM, {climb.Minutes:0} min) - {textures.Count} textures in {tiles} scenery tiles: " +
                  $"{had} already have what X-Plane will want, {queued} queued ({target.Name})");
         return queued;
+    }
+
+    /// <summary>
+    /// The first position X-Plane sends: an aircraft far from the plan's departure flies another flight (the plan is
+    /// stale), so the departure's textures still waiting are dropped. Before X-Plane runs this is the only place check.
+    /// </summary>
+    private void DropDepartureIfElsewhere(FlightPlan flight, CameraReport camera)
+    {
+        double km = Geo.DistanceM(flight.Origin.Lat, flight.Origin.Lon, camera.Lat, camera.Lon) / 1000;
+        if (km <= DeparturePrefetch.StalePlanKm) return;
+        int dropped = targets.Sum(t => t.CancelDeparture());
+        Log.Info($"SimBrief: the aircraft is {km:0} km from the flight plan's departure {Name(flight.Origin)}, so the plan is not this flight's; " +
+                 $"{dropped} departure textures still waiting were dropped");
     }
 
     private void Cancel()

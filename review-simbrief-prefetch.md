@@ -54,7 +54,7 @@ Never claim a test passed without running it.
        Done for the mip-streaming departure (`PrefetchAround`). The fallback without mip streaming goes through
        `Prefetch` / the build scheduler, shared with the flight-path prefetch, and is not marked. A roll before the
        pre-warm ever ran (`GroundDecision.Rolled`, once) drops the departure's requests too.
-4. [ ] **R11 / H5**: stale-OFP guard (`params.time_generated` at mount start, cancel on the first far-away position,
+4. [x] **R11 / H5**: stale-OFP guard (`params.time_generated` at mount start, cancel on the first far-away position,
        log the skip), plus the rest of T2 and the `time_generated` part of T5.
 5. [ ] **M2**: track the ground pre-warm task, await it in `StopAsync`, log unexpected exceptions, plus T4.
 6. [ ] **M3**: drop a failing base step after N attempts, count only real build starts, plus T3.
@@ -228,8 +228,8 @@ one from the fresh branch once R1 and R2 are done.
 
 | ID | Requirement | Status | Work |
 |---|---|---|---|
-| R1 | Gate pre-warm must never delay real reads | **Open** (H1, H3) | Fix H1 (ground requests block load-ahead) and H3 (ground builds hold the heavy slots), measure H2 |
-| R2 | Departure prefetch at about `Warm` | **Open** | Near textures get `NearWarm` today (`MipWarmer.cs:189` via `PriorityOf`, `:215`); cap departure at `FetchPriority.Warm` |
+| R1 | Gate pre-warm must never delay real reads | **Open** (H1 done, H3 to measure) | Fix H1 (ground requests block load-ahead) and H3 (ground builds hold the heavy slots), measure H2 |
+| R2 | Departure prefetch at about `Warm` | Done | Near textures get `NearWarm` today (`MipWarmer.cs:189` via `PriorityOf`, `:215`); cap departure at `FetchPriority.Warm` |
 | R3 | Gate pre-warm at `Background` or below | Done | `GroundPriority` = 401-403, below `Background` (400) |
 | R4 | Download budget per session | **Open**, new | See below |
 | R5 | Pre-warm must not evict what was just built | Partly; **open** for a related issue | See below |
@@ -238,7 +238,7 @@ one from the fresh branch once R1 and R2 are done.
 | R8 | Never log the username or Pilot ID | Done (checked) | No log line contains it, and the URL with `?username=` is never logged. Add a test that the problems `SimBriefAnswer` can carry never contain the user |
 | R9 | Fetch once per mount, plus an explicit re-fetch, no polling | Done for once per mount; **button open** (M1) | Clarified: "explicit" means a **button the user presses whenever they want**. No automatic re-fetch (not even when parked) and no polling. See M1 |
 | R10 | Short timeout, a slow SimBrief never holds up the mount | Done | 10 s, and the fetch runs in the background (L7 dropped) |
-| R11 | Stale OFP guard: near the origin and/or recent, otherwise log the skip | **Open** (H5) | See below: the position check alone kills the main win |
+| R11 | Stale OFP guard: near the origin and/or recent, otherwise log the skip | Done (H5) | `FlightPlan.MaxAge` (6 h, from `params.time_generated`) at mount start; the first real position > 50 km from the origin drops the departure requests (`GroundPrewarm.DropDepartureIfElsewhere`). Both log the skip |
 | R12 | Numbers in the PR: tiles and MB, build time, hit rate | **Open**, new | See below |
 
 ### R4. Download budget

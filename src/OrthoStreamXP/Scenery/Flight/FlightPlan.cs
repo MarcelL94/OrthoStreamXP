@@ -9,8 +9,19 @@ internal sealed record FlightOrigin(string Icao, double Lat, double Lon, double 
 internal sealed record RoutePoint(string Ident, double Lat, double Lon, double AltitudeFt, double Minutes, string Stage);
 
 /// <summary>The latest SimBrief flight plan as far as the scenery goes: the airports and the route.</summary>
-internal sealed record FlightPlan(FlightOrigin Origin, FlightOrigin? Destination, FlightOrigin? Alternate, IReadOnlyList<RoutePoint> Route)
+/// <param name="Generated">When the pilot generated it (SimBrief's <c>params.time_generated</c>); null when the plan does not say.</param>
+internal sealed record FlightPlan(FlightOrigin Origin, FlightOrigin? Destination, FlightOrigin? Alternate, IReadOnlyList<RoutePoint> Route,
+    DateTimeOffset? Generated = null)
 {
+    /// <summary>
+    /// An older plan is taken for an earlier flight: its departure is not prefetched. At mount start X-Plane usually
+    /// sends no position yet, so the age is the only check there is.
+    /// </summary>
+    public static readonly TimeSpan MaxAge = TimeSpan.FromHours(6);
+
+    /// <summary>How long ago it was generated; null when unknown.</summary>
+    public TimeSpan? AgeAt(DateTimeOffset now) => Generated is { } at ? now - at : null;
+
     /// <summary>Two airports this close share their scenery (the 3 x 4 tiles X-Plane loads round each are the same).</summary>
     public const double SamePlaceKm = 10;
 

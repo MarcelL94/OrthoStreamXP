@@ -118,8 +118,20 @@ public sealed class SimBriefPrefetchTests : IDisposable
 
     // ---------------------------------------------------------------- what is queued
 
+    private static readonly DateTimeOffset Now = new(2026, 11, 11, 12, 0, 0, TimeSpan.Zero);
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private static readonly TimeProvider Clock = new FixedClock(Now);
+
+    private static Func<CancellationToken, Task<FlightPlan?>> PlanFrom(FlightOrigin origin, DateTimeOffset? generated = null) =>
+        _ => Task.FromResult<FlightPlan?>(new FlightPlan(origin, null, null, [], generated));
+
     private async Task<(int Queued, List<VirtualPath> Prefetched)> Run(Func<VirtualPath, bool> isCached, FlightOrigin? origin = null,
-        (double, double)? aircraft = null)
+        (double, double)? aircraft = null, DateTimeOffset? generated = null)
     {
         string package = Package(AtAirport, Around, FarAway);
         var prefetched = new List<VirtualPath>();
@@ -128,7 +140,7 @@ public sealed class SimBriefPrefetchTests : IDisposable
             prefetched.AddRange(textures);
             return textures.Count;
         });
-        var prefetch = new DeparturePrefetch(_ => Task.FromResult<FlightOrigin?>(origin ?? new FlightOrigin("EDDM", Lat, Lon)), () => aircraft, [target], radiusKm: 10);
+        var prefetch = new DeparturePrefetch(PlanFrom(origin ?? new FlightOrigin("EDDM", Lat, Lon), generated), () => aircraft, [target], radiusKm: 10, Clock);
         return (await prefetch.RunAsync(TestContext.Current.CancellationToken), prefetched);
     }
 
@@ -162,9 +174,33 @@ public sealed class SimBriefPrefetchTests : IDisposable
     }
 
     [Fact]
+    public async Task A_plan_generated_more_than_six_hours_ago_is_taken_for_an_earlier_flight()
+    {
+        // R11: at mount start X-Plane usually sends no position, so the plan's age is the check.
+        var (old, prefetched) = await Run(_ => false, generated: Now - TimeSpan.FromHours(7));
+        var (recent, _) = await Run(_ => false, generated: Now - TimeSpan.FromHours(2));
+        var (unknown, _) = await Run(_ => false); // a plan without the time: used
+
+        Assert.Equal(0, old);
+        Assert.Empty(prefetched);
+        Assert.Equal(2, recent);
+        Assert.Equal(2, unknown);
+    }
+
+    [Fact]
+    public void Reads_when_the_plan_was_generated()
+    {
+        const string withTime = """{"fetch":{"status":"Success"},"params":{"request_id":"1","time_generated":"1762790400"},"origin":{"icao_code":"EDDM","pos_lat":"48.35","pos_long":"11.78"}}""";
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1762790400), SimBriefClient.Parse(withTime).Plan!.Generated);
+        Assert.Null(SimBriefClient.Parse(Ofp).Plan!.Generated); // no params
+        const string garbled = """{"params":{"time_generated":"soon"},"origin":{"icao_code":"EDDM","pos_lat":"48.35","pos_long":"11.78"}}""";
+        Assert.Null(SimBriefClient.Parse(garbled).Plan!.Generated);
+    }
+
+    [Fact]
     public async Task No_flight_plan_queues_nothing()
     {
-        var prefetch = new DeparturePrefetch(_ => Task.FromResult<FlightOrigin?>(null), () => null,
+        var prefetch = new DeparturePrefetch(_ => Task.FromResult<FlightPlan?>(null), () => null,
             [new DepartureTarget("pkg", Package(AtAirport), _ => false, _ => throw new InvalidOperationException("nothing to queue"))], radiusKm: 10);
 
         Assert.Equal(0, await prefetch.RunAsync(TestContext.Current.CancellationToken));
@@ -181,7 +217,7 @@ public sealed class SimBriefPrefetchTests : IDisposable
             (textures, _, _) => { area.AddRange(textures); return (textures.Count - 1, 1); });
         CancellationToken ct = TestContext.Current.CancellationToken;
 
-        int queued = await new DeparturePrefetch(_ => Task.FromResult<FlightOrigin?>(new FlightOrigin("EDDM", Lat, Lon)), () => null, [Target(package)], 10).RunAsync(ct);
+        int queued = await new DeparturePrefetch(PlanFrom(new FlightOrigin("EDDM", Lat, Lon)), () => null, [Target(package)], 10).RunAsync(ct);
         Assert.Equal(1, queued);
         Assert.Equal([AtAirport.Stem, FarAway.Stem], Stems(area)); // as the DSF names them, far ones too
         Assert.Empty(whole);
@@ -189,7 +225,7 @@ public sealed class SimBriefPrefetchTests : IDisposable
         // A package without its DSFs there (or 7-Zip ones): the textures within the radius, whole.
         Directory.Delete(_tree.PathOf("pkg/Earth nav data"), recursive: true);
         area.Clear();
-        await new DeparturePrefetch(_ => Task.FromResult<FlightOrigin?>(new FlightOrigin("EDDM", Lat, Lon)), () => null, [Target(package)], 10).RunAsync(ct);
+        await new DeparturePrefetch(PlanFrom(new FlightOrigin("EDDM", Lat, Lon)), () => null, [Target(package)], 10).RunAsync(ct);
         Assert.Empty(area);
         Assert.Equal([AtAirport.Stem, Around.Stem], Stems(whole));
     }

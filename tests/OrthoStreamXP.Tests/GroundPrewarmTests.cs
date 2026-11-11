@@ -214,6 +214,28 @@ public sealed class GroundPrewarmTests : IDisposable
         Assert.True(ground2 >= 1 && departure2 >= 1, $"ground {ground2}, departure {departure2}");
     }
 
+    [Fact]
+    public void A_first_position_far_from_the_departure_drops_the_departures_requests_once()
+    {
+        // R11: the plan's age passed at mount start, but the aircraft is somewhere else: the plan is not this flight's.
+        var plan = Task.FromResult<FlightPlan?>(new FlightPlan(Eddv, Eddf, null, []));
+        var t0 = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        int departure = 0;
+        var prewarm = new GroundPrewarm(plan, [new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _) => (0, 0), () => 0, () => ++departure)]);
+
+        prewarm.OnCamera(new CameraReport(Eddv.Lat, Eddv.Lon, 3, null, null, false, t0, Inferred: true)); // placed from X-Plane's reads: not a position
+        Assert.Equal(0, departure);
+        prewarm.OnCamera(new CameraReport(Eddf.Lat, Eddf.Lon, 3, null, null, false, t0.AddSeconds(1))); // at EDDF, 270 km away
+        Assert.Equal(1, departure);
+        prewarm.OnCamera(new CameraReport(Eddf.Lat, Eddf.Lon, 3, null, null, false, t0.AddSeconds(2)));
+        Assert.Equal(1, departure); // only the first position
+
+        int atGate = 0;
+        var here = new GroundPrewarm(plan, [new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _) => (0, 0), () => 0, () => ++atGate)]);
+        here.OnCamera(new CameraReport(Eddv.Lat + 0.01, Eddv.Lon, 3, null, null, false, t0));
+        Assert.Equal(0, atGate);
+    }
+
     // ---------------------------------------------------------------- what it queues
 
     private sealed record Call(int Phase, int Textures, double FirstDistanceM);

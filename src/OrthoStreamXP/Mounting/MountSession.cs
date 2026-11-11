@@ -224,7 +224,7 @@ internal sealed class MountSession : IDisposable
         CancellationToken stop = _summaries.Token;
         // One flight plan for the departure prefetch and the ground pre-warm.
         Task<FlightPlan?> plan = client.LatestPlanAsync(user, stop);
-        var prefetch = new DeparturePrefetch(async ct => (await plan.WaitAsync(ct).ConfigureAwait(false))?.Origin,
+        var prefetch = new DeparturePrefetch(plan.WaitAsync,
             () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, targets, _settings.SimBriefRadiusKm);
         GroundTarget[] ground = [.. _mounts.Where(m => m.Warmer is not null)
             .Select(m => (Mount: m, Warmer: m.Warmer!))

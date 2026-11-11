@@ -17,10 +17,11 @@ internal sealed record DepartureTarget(string Name, string Source, Func<VirtualP
 /// otherwise (or when the package's DSFs cannot be read) the textures within <c>radiusKm</c> at full detail. What
 /// the cache has already is left alone; X-Plane's own reads still come first in the download queue.
 /// </summary>
-/// <param name="origin">The flight plan's departure airport, or null when there is none.</param>
+/// <param name="plan">The latest flight plan, or null when there is none.</param>
 /// <param name="aircraft">Where the aircraft is now, when X-Plane has sent a position.</param>
-internal sealed class DeparturePrefetch(Func<CancellationToken, Task<FlightOrigin?>> origin, Func<(double Lat, double Lon)?> aircraft,
-    IReadOnlyList<DepartureTarget> targets, double radiusKm)
+/// <param name="clock">The time now, for the plan's age (<see cref="FlightPlan.MaxAge"/>); the system's when null.</param>
+internal sealed class DeparturePrefetch(Func<CancellationToken, Task<FlightPlan?>> plan, Func<(double Lat, double Lon)?> aircraft,
+    IReadOnlyList<DepartureTarget> targets, double radiusKm, TimeProvider? clock = null)
 {
     /// <summary>The most textures queued per package: a 10 km circle holds a few hundred ZL18 textures at most.</summary>
     public const int MaxTextures = 600;
@@ -30,8 +31,14 @@ internal sealed class DeparturePrefetch(Func<CancellationToken, Task<FlightOrigi
     /// <summary>Queues the departure textures the cache does not have; returns how many were queued.</summary>
     public async Task<int> RunAsync(CancellationToken ct)
     {
-        if (await origin(ct).ConfigureAwait(false) is not { } from) return 0;
+        if (await plan(ct).ConfigureAwait(false) is not { } flight) return 0;
+        FlightOrigin from = flight.Origin;
         string place = from.Icao.Length > 0 ? from.Icao : $"{from.Lat:F3}, {from.Lon:F3}";
+        if (flight.AgeAt((clock ?? TimeProvider.System).GetUtcNow()) is { } age && age > FlightPlan.MaxAge)
+        {
+            Log.Info($"SimBrief: the latest flight plan ({place}) is {age.TotalHours:0} h old; its departure is not prefetched");
+            return 0;
+        }
         if (aircraft() is { } at && Geo.DistanceM(at.Lat, at.Lon, from.Lat, from.Lon) > StalePlanKm * 1000)
         {
             Log.Info($"SimBrief: {place} is the latest flight plan's departure, but the aircraft is more than {StalePlanKm:0} km away; nothing prefetched");

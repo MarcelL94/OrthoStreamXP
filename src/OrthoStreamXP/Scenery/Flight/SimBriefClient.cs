@@ -76,7 +76,7 @@ internal sealed class SimBriefClient(HttpClient http)
             if (status is not null && !status.Equals("Success", StringComparison.OrdinalIgnoreCase))
                 return SimBriefAnswer.Failed(status.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) ? status[6..].Trim() : status);
             if (Airport(root, "origin") is not { } origin) return SimBriefAnswer.Failed("the latest flight plan has no departure position");
-            return new SimBriefAnswer(new FlightPlan(origin, Airport(root, "destination"), Airport(root, "alternate"), Route(root)), null);
+            return new SimBriefAnswer(new FlightPlan(origin, Airport(root, "destination"), Airport(root, "alternate"), Route(root), Generated(root)), null);
         }
         catch (JsonException)
         {
@@ -92,6 +92,14 @@ internal sealed class SimBriefClient(HttpClient http)
         if (airport.ValueKind != JsonValueKind.Object || Number(airport, "pos_lat") is not { } lat || Number(airport, "pos_long") is not { } lon
             || lat is < -90 or > 90 || lon is < -180 or > 180) return null;
         return new FlightOrigin(Text(airport, "icao_code") ?? "", lat, lon, Number(airport, "elevation") ?? 0);
+    }
+
+    /// <summary>When the plan was generated: <c>params.time_generated</c>, Unix seconds (as a string, like the coordinates).</summary>
+    private static DateTimeOffset? Generated(JsonElement root)
+    {
+        if (!root.TryGetProperty("params", out JsonElement parameters) || parameters.ValueKind != JsonValueKind.Object
+            || Number(parameters, "time_generated") is not { } seconds || seconds is <= 0 or > 32503680000) return null; // > year 3000: not a time
+        return DateTimeOffset.FromUnixTimeSeconds((long)seconds);
     }
 
     /// <summary>The navlog's points in order; one point comes as an object, not an array.</summary>
