@@ -79,6 +79,21 @@ public sealed class CacheAreasTests : IDisposable
     }
 
     [Fact]
+    public void An_area_only_prefetched_goes_before_an_area_flown_even_when_its_files_are_newer()
+    {
+        // R5: the alternate was pre-warmed (files written just now) but never flown; Wrocław was flown earlier.
+        File($"level0_4096-4096/P/textures/{Wroclaw}.dds", 600);
+        AreaUsage usage = AreaUsage.Load(Cache);
+        usage.Note(new AreaName(51, 17));
+        Thread.Sleep(20);
+        File($"level0_4096-4096/P/textures/{Prague}.dds", 600); // the pre-warm writes it after the flight's last use
+
+        var (removed, _) = CacheAreas.Trim(Cache, 1000, usage, TestContext.Current.CancellationToken);
+
+        Assert.Equal([new AreaName(50, 13)], removed);
+    }
+
+    [Fact]
     public void An_area_is_pictured_from_its_textures_smallest_levels()
     {
         byte[] rgb = new byte[64 * 64 * 3];

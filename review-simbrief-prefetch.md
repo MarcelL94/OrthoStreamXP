@@ -88,7 +88,7 @@ Never claim a test passed without running it.
         `simbrief-max-mb`, default 1000 MB (user, 2026-11-11), 0 = no limit. `PrefetchBudget` shared by every package,
         spent by the phase meters' build bytes; then each warmer drops its waiting SimBrief requests and queues no more.
         Not covered: the whole-texture fallback without mip streaming (as in H4). Revisit the default with the R12 numbers.
-13. [ ] **R5**: unflown areas rank as least recently used in `CacheAreas.Trim`, plus a test (F5).
+13. [x] **R5**: unflown areas rank as least recently used in `CacheAreas.Trim`, plus a test (F5).
 14. [ ] **M1 / R9**: the "Reload SimBrief flight plan" button on Home (button only, no automatic fetch), plus its tests.
 15. [ ] **Alternate behind its own switch** (default off), as the maintainer asked (PR structure step 3). F5 backs it.
 16. [ ] **M4**: not seen in flight (F7). Only if R6 is agreed: use real ground speed or on-ground data instead of the
@@ -252,7 +252,7 @@ one from the fresh branch once R1 and R2 are done.
 | R2 | Departure prefetch at about `Warm` | Done | Near textures get `NearWarm` today (`MipWarmer.cs:189` via `PriorityOf`, `:215`); cap departure at `FetchPriority.Warm` |
 | R3 | Gate pre-warm at `Background` or below | Done | `GroundPriority` = 401-403, below `Background` (400) |
 | R4 | Download budget per session | Done | `simbrief-max-mb` (default 1000 MB), step 12 |
-| R5 | Pre-warm must not evict what was just built | Partly; **open** for a related issue | See below |
+| R5 | Pre-warm must not evict what was just built | Done | Mid-flight eviction can't happen; areas X-Plane never opened now go first in `CacheAreas.Trim` (step 13) |
 | R6 | Reuse the existing models | **Open**, ask him | See below |
 | R7 | User-Agent `orthostreamxp/<version>` like the tile downloads | Done (L6) | One shared constant for the tile downloads, the Setup test and SimBrief |
 | R8 | Never log the username or Pilot ID | Done (tested) | No log line contains it, and the URL with `?username=` is never logged. Add a test that the problems `SimBriefAnswer` can carry never contain the user |
