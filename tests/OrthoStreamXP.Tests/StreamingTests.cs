@@ -495,6 +495,21 @@ public sealed class StreamingTests : IDisposable
     }
 
     [Fact]
+    public void The_departure_prefetch_is_never_more_urgent_than_Warm()
+    {
+        // R2: full detail beside the gate is still a guess; it must not rank with load-ahead next to the camera.
+        Setup s = Streaming();
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+        StreamedTexture near = s.Streamer.Get(Texture())!;
+        VirtualPath middle = Texture("21904_35856_BI16"), far = Texture("21904_36144_BI16");
+
+        warmer.PrefetchAround([Texture(), middle, far], near.Lat, near.Lon);
+
+        Assert.Equal(FetchPriority.Warm, warmer.WaitingFor(Texture())!.Value.Priority); // its base tile first, at Warm
+        Assert.All(new[] { Texture(), middle, far }, texture => Assert.True(warmer.WaitingFor(texture)!.Value.Priority >= FetchPriority.Warm));
+    }
+
+    [Fact]
     public void The_ground_prewarm_ranks_after_the_departure_and_is_dropped_for_the_takeoff()
     {
         Setup s = Streaming();
@@ -510,7 +525,7 @@ public sealed class StreamingTests : IDisposable
         Assert.Equal(2, warmer.GroundWaiting);
 
         // Full detail asked for, nothing there yet: the base tile first, still below the departure and in phase order.
-        int departure = warmer.Target(Texture(), 0, FetchPriority.NearWarm)!.Value.Priority;
+        int departure = warmer.WaitingFor(Texture())!.Value.Priority;
         int first = warmer.Target(arrival, 0, MipWarmer.GroundPriority(GroundPrewarm.Arrival))!.Value.Priority;
         int last = warmer.Target(route, 0, MipWarmer.GroundPriority(GroundPrewarm.Route))!.Value.Priority;
         Assert.True(departure < FetchPriority.Background && FetchPriority.Background < first && first < last, $"{departure} < {first} < {last}");

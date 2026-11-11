@@ -49,7 +49,7 @@ and the relevant tests, and say in the commit message what ran. If the build or 
 Never claim a test passed without running it.
 
 1. [x] **H1 / R1**: ground requests must not block load-ahead (`AddOrOutrank`), plus test T1.
-2. [ ] **R2**: departure prefetch capped at `FetchPriority.Warm` (no `NearWarm`).
+2. [x] **R2**: departure prefetch capped at `FetchPriority.Warm` (no `NearWarm`).
 3. [ ] **H4**: mark departure requests and drop them on the takeoff roll, plus part of test T2.
 4. [ ] **R11 / H5**: stale-OFP guard (`params.time_generated` at mount start, cancel on the first far-away position,
        log the skip), plus the rest of T2 and the `time_generated` part of T5.

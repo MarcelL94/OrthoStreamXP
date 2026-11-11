@@ -184,9 +184,13 @@ internal sealed class MipWarmer : IDisposable
                 had++;
                 continue;
             }
-            // Far ones are only their base tile: before the middle levels, as X-Plane reads far scenery first. The ground
-            // pre-warm's phases come after all of it, in their order.
-            int priority = phase is int p ? GroundPriority(p) : mip >= Coarsest(t) ? FetchPriority.Warm : PriorityOf(t, wanted);
+            // Far ones are only their base tile: before the middle levels, as X-Plane reads far scenery first. Nothing of
+            // the departure is more urgent than Warm: near the gate it is still a guess, and it must not hold up what
+            // X-Plane really asks for or load-ahead next to the camera. The ground pre-warm's phases come after all of
+            // it, in their order.
+            int priority = phase is int p ? GroundPriority(p)
+                : mip >= Coarsest(t) ? FetchPriority.Warm
+                : Math.Max(FetchPriority.Warm, PriorityOf(t, wanted));
             requests.Add(new Request(texture, mip, priority, Distance: order, Ground: phase is not null));
         }
         int queued = 0;
