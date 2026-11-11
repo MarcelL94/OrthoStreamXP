@@ -7,6 +7,7 @@ is unchanged up to `e59478f` (later commits only touch `CLAUDE.md` and this file
   `MountSession`.
 - **Round 2** (2026-11-11 midday): every changed file, including the GUI, the tests and the `MipWarmer` /
   `TextureStreamer` internals the new code relies on. Round 1's findings are kept, re-checked and re-ranked below.
+- **Flight** (2026-11-11): the EDDV → ENGM flight of 2026-11-10 merged in (F1-F10, section "Real flight EDDV → ENGM").
 - **Maintainer answer** (2026-11-11): his requirements for the upstream PR, R1-R12 (section right after "Overall").
 
 Context: a feature proposal has been posted upstream (flysimdev/OrthoStreamXP). It describes this branch as work in
@@ -26,19 +27,19 @@ Tick the boxes in this file as you go, and commit this file together with the wo
 This session has findings from a complete real flight, EDDV (Hannover) → ENGM (Oslo), that are not in this file yet.
 Merge them before writing any code:
 
-- [ ] Add a section **"Real flight EDDV → ENGM"** right after this one. Include the route, date, the settings that
+- [x] Add a section **"Real flight EDDV → ENGM"** right after this one. Include the route, date, the settings that
       matter (mip streaming, `level-change`, providers, cache state at start), and each observation with its log
       evidence (timestamps, the log lines, numbers).
-- [ ] Give each finding an ID **F1, F2, ...** In the same section, map each one: "confirms H2", "new", "contradicts
+- [x] Give each finding an ID **F1, F2, ...** In the same section, map each one: "confirms H2", "new", "contradicts
       H3", and so on. Where a flight finding confirms, refutes or re-ranks an existing item (H*, M*, L*, R*), update that
       item in place. Change its severity, replace "verify" with the measured result, and add a line "Seen in flight:
       F<n>".
-- [ ] Add the new F items to "Findings at a glance".
-- [ ] Insert each F item into the Step 1 work order where its severity belongs. Anything that hurt real X-Plane reads
+- [x] Add the new F items to "Findings at a glance".
+- [x] Insert each F item into the Step 1 work order where its severity belongs. Anything that hurt real X-Plane reads
       in the flight comes before everything else (R1: "must not make the existing streaming worse").
-- [ ] Answer from the flight data what "What to log in the next test flight" asks, where it can be answered. Mark
+- [x] Answer from the flight data what "What to log in the next test flight" asks, where it can be answered. Mark
       what is still unknown.
-- [ ] Commit only this file ("Review notes: merge the EDDV-ENGM flight findings"). Then continue with Step 1 without
+- [x] Commit only this file ("Review notes: merge the EDDV-ENGM flight findings"). Then continue with Step 1 without
       waiting.
 
 ### Step 1: implement, in this order
@@ -54,20 +55,26 @@ Never claim a test passed without running it.
        log the skip), plus the rest of T2 and the `time_generated` part of T5.
 5. [ ] **M2**: track the ground pre-warm task, await it in `StopAsync`, log unexpected exceptions, plus T4.
 6. [ ] **M3**: drop a failing base step after N attempts, count only real build starts, plus T3.
-7. [ ] **R7**: one shared `orthostreamxp/<version>` User-Agent for the tile downloads, the Setup test and SimBrief.
-8. [ ] **R8 test**: problems a `SimBriefAnswer` carries never contain the username or Pilot ID.
-9. [ ] **R12 + measurement logging**: the per-phase summary at mount stop (queued, built, cached, tiles and MB, build
-       time, hit rate), plus the H2/H3 measurements from "What to log". Needed before step 10 can be decided.
-10. [ ] **H2 / H3**: fix them only if the flight data (Step 0) or the new logging shows them. Otherwise leave them as
-        measured-but-fine and note that here.
-11. [ ] **R4**: the per-session download budget for the prefetch (setting, counter in the downloader, log when used up).
-12. [ ] **R5**: unflown areas rank as least recently used in `CacheAreas.Trim`, plus a test.
-13. [ ] **M1 / R9**: the "Reload SimBrief flight plan" button on Home (button only, no automatic fetch), plus its tests.
-14. [ ] **Alternate behind its own switch** (default off), as the maintainer asked (PR structure step 3).
-15. [ ] **M4**: if the flight showed it, or if R6 is agreed, use real ground speed or on-ground data instead of the
+7. [ ] **F3**: give the memory back once the ground queue is empty (ask how first, see "Stop and ask").
+8. [ ] **R7**: one shared `orthostreamxp/<version>` User-Agent for the tile downloads, the Setup test and SimBrief.
+9. [ ] **R8 test**: problems a `SimBriefAnswer` carries never contain the username or Pilot ID.
+10. [ ] **R12 + measurement logging**: the per-phase summary at mount stop (queued, built, cached, tiles and MB, build
+        time, hit rate), plus the H2/H3 measurements from "What to log" (F8: today the prefetch's share of the 7.8 GB
+        is unknown). Needed before step 11 can be decided.
+11. [ ] **H2 / H3**: the EDDV → ENGM flight did not show them (F2, F7). Fix them only if the new logging shows them on
+        a cold or slow run. Otherwise leave them as measured-but-fine and note that here.
+12. [ ] **R4**: the per-session download budget for the prefetch (setting, counter in the downloader, log when used up).
+13. [ ] **R5**: unflown areas rank as least recently used in `CacheAreas.Trim`, plus a test (F5).
+14. [ ] **M1 / R9**: the "Reload SimBrief flight plan" button on Home (button only, no automatic fetch), plus its tests.
+15. [ ] **Alternate behind its own switch** (default off), as the maintainer asked (PR structure step 3). F5 backs it.
+16. [ ] **M4**: not seen in flight (F7). Only if R6 is agreed: use real ground speed or on-ground data instead of the
         camera's motion.
-16. [ ] **Minor items** L1-L5, L8-L12 where cheap.
-17. [ ] **D1-D4**: help texts, the Home switch wording, the docs page and the release-notes entry.
+17. [ ] **Minor items** L1-L5, L8-L12 where cheap.
+18. [ ] **D1-D4**: help texts, the Home switch wording, the docs page and the release-notes entry.
+
+Nothing in the flight hurt X-Plane's reads (0 near waits, 1 middle wait of 4 ms, 3 far flat reads unrelated to the
+prefetch), so no F item jumps ahead of H1. F6 (climb by height) waits for the user's decision. F9 is load-ahead, not
+SimBrief: not in this plan.
 
 ### Stop and ask the user (don't decide alone)
 
@@ -76,6 +83,82 @@ Never claim a test passed without running it.
 - Adding a NuGet dependency, changing a public API or a settings name, or any broad refactor.
 - Anything on `main`. Creating the PR branch (that is after Step 1, see "Branch plan").
 - A flight finding that suggests changing the design itself (e.g. dropping the climb pre-warm).
+- **F6** (end the climb pre-warm by height, ~FL200, instead of at TOC): a design change, so ask first.
+- **F3**: how to give the memory back (a one-off compacting GC of the large-object heap is the cheap option; reusing
+  build buffers is the real fix, but it is broader).
+
+## Real flight EDDV → ENGM
+
+- **Flight:** EDDV (Hannover) → ENGM (Oslo), alternate ENZV. 2026-11-10, session 20:32:03-22:33:17 (121 min, 954 km).
+  Test installer RC 8 (`1.3.0-rc.8`, branch at `1f287f3`).
+- **Settings that matter:** mip streaming on, Ultra preset, 128 download workers, paging `k=auto` (remembered k 4481),
+  `level-change` default, package `OrthoStream_Eur` (uncompressed DSFs), Esri/Bing default providers, SimBrief user set,
+  Home switch on.
+- **Cache at start:** partly warm around EDDV (earlier EDDV test runs the same day): 2,781 of the 3,554 departure
+  textures already had what X-Plane wanted. Arrival, alternate and the route were empty.
+- **Evidence:** `%LOCALAPPDATA%\OrthoStreamXP\logs\orthostreamxp-20261110-203203.log`, `reads-20261110-203203.csv`,
+  `camera-20261110-203203.csv` (camera time 0 = 20:32:03).
+- **No control flight.** Nothing was flown without the pre-warm, so "0 waits" is not a measured difference.
+
+Timeline from the log:
+
+```
+20:32:04,379 SimBrief: EDDV - 3554 textures in the 12 scenery tiles X-Plane loads there: 2781 already have what X-Plane will want, 773 queued
+20:33:43,619 Load-ahead: 2316 textures of the loaded scenery known, 0 waiting for a place; 773 builds started so far
+20:34:03,116 Streaming summary: ... 3019 real (100%), 0 with stand-ins, 0 flat; waited: near 0, middle 0; builds: 0 for reads, 773 ahead
+20:35:21,642 Ground pre-warm: the aircraft stands at EDDV; building the rest of the flight's scenery until it rolls for takeoff
+20:35:22,246 Ground pre-warm: arrival ENGM - 3540 textures in 12 scenery tiles: 0 already have ..., 3540 queued
+20:35:22,567 Ground pre-warm: alternate ENZV - 1420 textures in 9 scenery tiles: 0 already have ..., 1420 queued
+20:35:22,594 Ground pre-warm: the climb to the top of climb (47 NM, 9 min) - 3554 textures in 12 scenery tiles: 3376 already have ..., 178 queued
+20:36:03,124 Load over the last 2 min: OrthoStreamXP CPU 4 % average, 12 % at the busiest 5 s; working set 3.5 GB; large objects 3.1 GB
+20:38:03,128 Streaming summary: ... 4658 real (100%); waited: near 0, middle 0; builds: 0 for reads, 6314 ahead (6314 asked), 0 failed; RAM 899 MB
+20:38:03,128 Load over the last 2 min: OrthoStreamXP CPU 6 % average, 21 % at the busiest 5 s; working set 4 GB; .NET heap 3.7 GB; large objects 3.5 GB (475 MB free)
+20:40 - 21:02 Load over the last 2 min: CPU 0 % average; working set 4 GB; large objects 3.5 GB (every 2 min, unchanged)
+21:02:51,280 Ground pre-warm: the aircraft is rolling for takeoff; 0 textures still waiting were dropped, load-ahead takes over
+21:04:03,207 Load over the last 2 min: working set 3.3 GB; large objects 2.9 GB (1.5 GB free)
+21:06:03,210 Streaming summary: ... 5258 real (100%); waited: near 0, middle 0; ... large objects 1.6 GB
+22:33:16,772 Streaming summary: 33714 level reads, 33711 real, 0 stand-ins, 3 flat; waited: near 0, middle 1 (avg 0.0 s); builds: 0 for reads, 15487 ahead, 0 failed; paging k: measured 4424 from 3836 mip changes
+22:33:16,810 Flight report: 121 min, 954 km, 7.8 GB downloaded (peak 68 Mbit/s), 15485 textures built, 3 reads without their real picture
+```
+
+Reads by phase (from the read log, analysed in `HANDOVER-simbrief.md`):
+
+| Phase | Reads | Near / middle / far | Waits | Not real |
+|---|---|---|---|---|
+| Ground EDDV | 3,868 | 41 / 1,222 / 2,605 | 0 | 0 |
+| Climb (departure tiles) | 943 | 184 / 759 / 0 | 0 | 0 |
+| Cruise, rows 54-59 | 8,579 | 431 / 3,777 / 4,371 | 1 (4 ms, middle, ZL18) | 3 flat (far, 159-191 km, new row) |
+| Descent and approach ENGM | 3,551 | 277 / 1,112 / 2,162 | 0 | 0 |
+| Landing, taxi | 106 | 48 / 58 / 0 | 0 | 0 |
+
+### Findings
+
+| ID | Severity | Finding | Evidence | Maps to |
+|---|---|---|---|---|
+| F1 | – (good) | The departure prefetch worked: the 773 missing textures were built in ~100 s, before X-Plane loaded the tiles. The gate load was 100 % real with 0 waits | 20:32:04 queued 773; 20:33:43 "0 waiting, 773 builds"; 20:34:03 3,019 reads 100 % real | Confirms the main win. Cache was partly warm, so it is not an empty-cache number |
+| F2 | – (good) | The ground pre-warm did not hurt X-Plane's reads at the gate: 6,314 builds ran while X-Plane read 4,658 levels, 100 % real, 0 waits | 20:35:22-20:38:03 summaries: "waited: near 0, middle 0" | R1 met for this flight. H1 not visible (no load-ahead request collided with a waiting ground one in a way that showed). H2 not visible |
+| F3 | **Medium** | **Memory is not given back after the pre-warm.** Working set 2.9 → 4 GB, .NET heap 3.7 GB, large-object heap 3.5 GB, while the streamer's texture RAM stayed at 899 MB. It stayed there for 24 min of idle (CPU 0 %), and only shrank once builds churned after takeoff (21:06: LOH 1.6 GB) | 20:38:03-21:02:03 "Load over the last 2 min" lines | **New.** R1 ("not worse") in memory terms: ~1.1 GB more than without the pre-warm, on the ground, while X-Plane loads |
+| F4 | – (good) | The arrival pre-warm paid off: at tile load, rows 59/60/61 (ENGM, pre-warmed) had what X-Plane wanted for **95 % / 98 % / 97 %** of textures, the ENGM tile 100 %. Not-pre-warmed rows 54-58: 1-6 % | Read log, first ~10 s after each "X-Plane loads the scenery tile" line | Numbers for R12 (hit rate). No control flight |
+| F5 | Low-Medium | The alternate ENZV (1,420 textures, 9 tiles, mostly sea) was queued and built but never flown | 20:35:22,567 | Confirms the case for structure step 3 (alternate behind its own switch) and for R5 (an unflown area now looks "just used" to `CacheAreas.Trim`) |
+| F6 | Low (design) | The climb pre-warm added little: first TOC at FL240 after 47 NM (step climb to FL390 later), so the climb stayed inside the departure tiles: 178 of 3,554 queued. En route at FL240-390, load-ahead alone had no trouble | 20:35:22,594; climb phase 943 reads, 0 waits | **New.** Idea: end the climb by height (~FL200) instead of TOC. A design change, so "Stop and ask" |
+| F7 | – | The takeoff roll stop was clean: one "rolling" line, at the real roll (camera crossed 40 kt at t = 1,848 s = 21:02:51). Taxi max 20 kt. 0 requests were waiting, and CPU had been 0 % since 20:40, so no build was running either | 21:02:51,280; camera csv | H3, H4: not seen (everything was done 24 min before the roll). M4: not seen (camera AGL max 31 m while parked; no fast outside-view move). L1: no duplicate line (`Queue` had long finished) |
+| F8 | – | 7.8 GB downloaded in 121 min. How much of it the prefetch caused is unknown: there is no per-phase counter | Flight report 22:33:16 | Confirms R4 and R12 need the counter |
+| F9 | Low, out of scope | 3 flat far reads on a new row (+55+008, 159-191 km, ~1.3 s after X-Plane opened them): no base tile yet | Read log; summary "3 flat" | **New**, but load-ahead, not SimBrief. Not for this PR |
+| F10 | – | The remembered paging k was right: measured 4424 from 3,836 level changes vs remembered 4481 | 22:33:16 summary | Branch scope (remembered k). Not for this PR |
+
+### Answers to "What to log in the next test flight"
+
+- **`_waiting.Count` and `StartWhatFits` duration:** *still unknown*, not logged. Proxy: the queue peaked at ~5,100
+  ground entries (not the feared 10-15k, because the climb reused the departure tiles), and OrthoStreamXP's CPU was
+  4-6 % average (12-21 % peak) while they ran. No sign of H2 at this size. A longer climb or a cold departure would
+  reach the bigger number.
+- **Builds still running at the "rolling" line:** 0 waiting (log), and effectively 0 running: all 6,314 had started by
+  20:38:03, CPU was 0 % from 20:40 on, and the count stayed at "6314 ahead (6314 asked)" until the roll. Only because
+  the line was fast (68 Mbit/s peak) and the taxi was long (27 min parked).
+- **Near-read waits in the first 2 min after takeoff:** 0 (summaries 21:04 and 21:06: "waited: near 0, middle 0").
+  The comparison with a flight without the ground pre-warm is *still unknown* (no control flight).
+- **Did a camera move stop the pre-warm early?** No. The only stop was the real roll. Not tested on purpose in the
+  outside view, so M4 remains possible.
 
 ## Overall
 
@@ -178,6 +261,8 @@ one from the fresh branch once R1 and R2 are done.
 - So a pre-warmed area that was never flown (an alternate, an unflown climb corridor) counts as "used just now".
   It survives the next trim, while older areas the pilot really flew are removed first. With a tight `cache-limit`,
   the pre-warm pushes out the pilot's real history.
+- Seen in flight: F5. The alternate ENZV (1,420 textures) was built and never flown: exactly the kind of area this
+  affects.
 - **Fix:** an area with no `AreaUsage` entry should rank as least recently used (e.g. `DateTime.MinValue` instead of the
   write time), or prefetch marks its areas as "prefetched, unused". Then pre-warmed but unflown scenery goes first. Add
   a test for `CacheAreas.Trim` with one flown area and one pre-warmed area.
@@ -222,15 +307,20 @@ also decide the default budget (R4) and whether the alternate is worth keeping (
 
 | ID | Severity | Area | Short |
 |---|---|---|---|
-| H1 | High | MipWarmer | Waiting ground requests swallow X-Plane's own load-ahead requests |
-| H2 | High (verify) | MipWarmer | Every pass ranks and probes the whole queue, now ~10k+ entries |
-| H3 | Medium-High (verify) | MipWarmer | Ground heavy builds hold heavy slots while waiting at the lowest download priority |
-| H4 | Medium-High | Departure prefetch | Departure requests never expire, even after takeoff |
+| H1 | High | MipWarmer | Waiting ground requests swallow X-Plane's own load-ahead requests (not visible in flight, F2) |
+| H2 | Medium (verify) | MipWarmer | Every pass ranks and probes the whole queue, now ~10k+ entries (not seen at ~5k, F2) |
+| H3 | Medium (verify) | MipWarmer | Ground heavy builds hold heavy slots while waiting at the lowest download priority (not seen, F7) |
+| H4 | Medium | Departure prefetch | Departure requests never expire, even after takeoff (not seen on a fast line, F1/F7) |
 | H5 | Medium-High | Departure prefetch | A stale OFP prefetches the wrong airport |
+| F3 | Medium | Memory | The pre-warm leaves a 3.5 GB large-object heap (4 GB working set) until takeoff |
 | M1 | Medium | MountSession | The OFP is fetched once, at mount start only: add a reload button (R9) |
 | M2 | Medium | GroundPrewarm | Fire-and-forget queue task, not awaited on stop |
 | M3 | Medium | MipWarmer | A base step that keeps failing never leaves the queue and inflates the build counter |
-| M4 | Low-Medium | GroundWatch | The camera's speed (outside view) can stop the pre-warm |
+| F5 | Low-Medium | Alternate | The alternate was built (1,420 textures, mostly sea) and never flown |
+| M4 | Low-Medium | GroundWatch | The camera's speed (outside view) can stop the pre-warm (not seen, F7) |
+| F6 | Low (design) | ClimbRoute | The climb pre-warm adds little when the first TOC is low; end it by height? (ask) |
+| F9 | Low, out of scope | Load-ahead | Flat far reads on a new row (no base tile yet) |
+| F1, F2, F4, F7, F8, F10 | – | Flight | Observations, see "Real flight EDDV → ENGM" |
 | L* | Low | various | See "Minor" |
 | D* | – | Docs/UX | Help texts, user guide, README and release notes |
 | T* | – | Tests | Gaps that match the findings above |
@@ -249,8 +339,14 @@ also decide the default budget (R4) and whether the alternate is worth keeping (
   `AddOrOutrank(Request)` used by all three call sites keeps the rule in one place.
 - **Test:** queue a ground request for a texture, raise `EntryAdded` for it, and assert that its target priority is
   load-ahead's and that `CancelGround()` keeps it.
+- Seen in flight: F2. Not visible (gate reads 100 % real, 0 waits, while the pre-warm ran). It stays High: the bug is
+  in the logic, and it hits as soon as a ground request is still waiting when X-Plane loads that texture (a slow line,
+  a short taxi, or the 178 climb textures that sit inside the departure tiles).
 
-### H2. Every pass ranks and probes the whole queue, now ~10k+ entries (verify by measuring)
+### H2. Every pass ranks and probes the whole queue, now ~10k+ entries (Medium, verify by measuring)
+
+- Seen in flight: F2. At ~5,100 ground entries, CPU was 4-6 % average and reads didn't wait. Downgraded from High.
+  `StartWhatFits` was not timed, so the 10-15k case (cold departure, long climb) is still unmeasured: step 9 logs it.
 
 - `StartWhatFits` (`MipWarmer.cs:281`) copies all of `_waiting` (`:284`), calls `Target()` on every entry and sorts the
   lot (`:286`) on **every** wake: each finished build, plus once a second.
@@ -273,7 +369,11 @@ also decide the default budget (R4) and whether the alternate is worth keeping (
     before the first item comes out). Ranking with a `PriorityQueue`, or a partial sort, avoids probing what cannot
     start anyway.
 
-### H3. Ground heavy builds hold heavy slots while waiting at the lowest download priority (verify)
+### H3. Ground heavy builds hold heavy slots while waiting at the lowest download priority (Medium, verify)
+
+- Seen in flight: F7. Not seen: everything was built by 20:38, 24 min before the roll, on a 68 Mbit/s line.
+  Downgraded from Medium-High. Still possible on a slow line or a short taxi: step 9 logs the running builds at the
+  "rolling" line.
 
 - `_running[kind]` is taken when a build starts and released only when it completes (`MipWarmer.cs:314` ff.).
 - The arrival's central textures want full detail (`MipFor` at a small distance → mip 0). They are **Heavy** builds,
@@ -290,7 +390,10 @@ also decide the default budget (R4) and whether the alternate is worth keeping (
     full detail during the approach.
 - **Check in a log:** builds still running at the "aircraft is rolling" line, and the heavy queue wait right after it.
 
-### H4. Departure requests never expire, even after takeoff
+### H4. Departure requests never expire, even after takeoff (Medium)
+
+- Seen in flight: F1, F7. Not seen: the 773 departure builds were done ~100 s after mount start. Downgraded from
+  Medium-High; the fix stays cheap and protects slow lines.
 
 - The departure requests carry a fixed mip and priority (`PrefetchPlaced` `:171`, `Target` `:248`: `if (mip is int
   fixedMip) return ...`), chosen for the gate. Near ones get `NearWarm`.
@@ -364,6 +467,9 @@ also decide the default budget (R4) and whether the alternate is worth keeping (
   failures. Increment `_queued` only when a build really started (`!build.IsCompleted`).
 
 ### M4. The camera's speed can stop the pre-warm (outside view)
+
+- Seen in flight: F7. Not seen: taxi max 20 kt, the stop came at the real roll. The outside view was not tested on
+  purpose, so it stays Low-Medium.
 
 - `GroundPrewarm.cs:76` passes the camera's motion as the ground speed. Moving the camera fast in the outside view
   (> `RollingKt` = 40 kt) can stop the pre-warm before the real roll. It never restarts, because the watch goes to
@@ -471,7 +577,8 @@ disposes.
 
 ## What to log in the next test flight
 
-These answer H2, H3 and M4 without guessing:
+Partly answered by the EDDV → ENGM flight (see "Answers to 'What to log'" there). Still open: the `StartWhatFits`
+timing and a control flight without the ground pre-warm. These answer H2, H3 and M4 without guessing:
 
 - `_waiting.Count` and the duration of `StartWhatFits`, every 100 passes, while the ground pre-warm runs.
 - At the "rolling for takeoff" line: the heavy, small and base builds still running, and how many of them are ground
