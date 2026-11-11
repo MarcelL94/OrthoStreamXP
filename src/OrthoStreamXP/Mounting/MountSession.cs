@@ -228,7 +228,8 @@ internal sealed class MountSession : IDisposable
             () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, targets, _settings.SimBriefRadiusKm);
         GroundTarget[] ground = [.. _mounts.Where(m => m.Warmer is not null)
             .Select(m => (Mount: m, Warmer: m.Warmer!))
-            .Select(m => new GroundTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, m.Warmer.PrefetchGround, m.Warmer.CancelGround))];
+            .Select(m => new GroundTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, m.Warmer.PrefetchGround, m.Warmer.CancelGround,
+                m.Warmer.CancelDeparture))];
         if (ground.Length > 0 && listener is not null) _ground = new GroundPrewarm(plan, ground);
         _departure = Task.Run(async () =>
         {

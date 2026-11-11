@@ -50,7 +50,10 @@ Never claim a test passed without running it.
 
 1. [x] **H1 / R1**: ground requests must not block load-ahead (`AddOrOutrank`), plus test T1.
 2. [x] **R2**: departure prefetch capped at `FetchPriority.Warm` (no `NearWarm`).
-3. [ ] **H4**: mark departure requests and drop them on the takeoff roll, plus part of test T2.
+3. [x] **H4**: mark departure requests and drop them on the takeoff roll, plus part of test T2.
+       Done for the mip-streaming departure (`PrefetchAround`). The fallback without mip streaming goes through
+       `Prefetch` / the build scheduler, shared with the flight-path prefetch, and is not marked. A roll before the
+       pre-warm ever ran (`GroundDecision.Rolled`, once) drops the departure's requests too.
 4. [ ] **R11 / H5**: stale-OFP guard (`params.time_generated` at mount start, cancel on the first far-away position,
        log the skip), plus the rest of T2 and the `time_generated` part of T5.
 5. [ ] **M2**: track the ground pre-warm task, await it in `StopAsync`, log unexpected exceptions, plus T4.

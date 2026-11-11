@@ -49,9 +49,10 @@ internal sealed class MipWarmer : IDisposable
     /// prefetch. <paramref name="Recheck"/>: queued again because the aircraft moved, not because X-Plane loaded it.
     /// <paramref name="Distance"/>: the order among the prefetch's own requests (from the departure, or along the route).
     /// <paramref name="Ground"/>: the ground pre-warm's, dropped when the aircraft rolls for takeoff.
+    /// <paramref name="Departure"/>: the SimBrief departure's, chosen for the gate; dropped then too.
     /// </summary>
     private readonly record struct Request(VirtualPath Texture, int? Mip = null, int? Priority = null, bool Recheck = false, double? Distance = null,
-        bool Ground = false);
+        bool Ground = false, bool Departure = false);
 
     private readonly TextureCatalog _catalog;
     private readonly TextureStreamer _streamer;
@@ -146,14 +147,22 @@ internal sealed class MipWarmer : IDisposable
         PrefetchPlaced(textures, place, phase);
 
     /// <summary>Drops the ground pre-warm's requests still waiting (the aircraft rolls for takeoff); returns how many.</summary>
-    public int CancelGround()
+    public int CancelGround() => Drop(static r => r.Ground);
+
+    /// <summary>
+    /// Drops the SimBrief departure's requests still waiting (the aircraft rolls for takeoff): their level and priority
+    /// were chosen for the gate, and after takeoff they would compete with load-ahead for the climb. Returns how many.
+    /// </summary>
+    public int CancelDeparture() => Drop(static r => r.Departure);
+
+    private int Drop(Func<Request, bool> which)
     {
         int dropped;
         lock (_gate)
         {
-            string[] ground = [.. _waiting.Where(w => w.Value.Ground).Select(w => w.Key)];
-            foreach (string key in ground) _waiting.Remove(key);
-            dropped = ground.Length;
+            string[] keys = [.. _waiting.Where(w => which(w.Value)).Select(w => w.Key)];
+            foreach (string key in keys) _waiting.Remove(key);
+            dropped = keys.Length;
         }
         Wake();
         return dropped;
@@ -191,7 +200,7 @@ internal sealed class MipWarmer : IDisposable
             int priority = phase is int p ? GroundPriority(p)
                 : mip >= Coarsest(t) ? FetchPriority.Warm
                 : Math.Max(FetchPriority.Warm, PriorityOf(t, wanted));
-            requests.Add(new Request(texture, mip, priority, Distance: order, Ground: phase is not null));
+            requests.Add(new Request(texture, mip, priority, Distance: order, Ground: phase is not null, Departure: phase is null));
         }
         int queued = 0;
         lock (_gate)

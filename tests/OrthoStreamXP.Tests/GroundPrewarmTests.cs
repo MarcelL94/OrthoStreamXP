@@ -171,6 +171,49 @@ public sealed class GroundPrewarmTests : IDisposable
         Assert.Equal(GroundDecision.None, paused.Update(Eddv.Lat, Eddv.Lon, 0, 2000, false, t0.AddMinutes(2)));
     }
 
+    [Fact]
+    public void A_takeoff_roll_before_the_prewarm_ran_is_said_once()
+    {
+        var watch = new GroundWatch(Eddv.Lat, Eddv.Lon);
+        var t0 = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        GroundDecision At(double seconds, double? kt = null, bool inferred = false) =>
+            watch.Update(Eddv.Lat, Eddv.Lon, kt, 3, inferred, t0.AddSeconds(seconds));
+
+        Assert.Equal(GroundDecision.None, At(0));
+        Assert.Equal(GroundDecision.None, At(10, kt: 60, inferred: true)); // not X-Plane's position
+        Assert.Equal(GroundDecision.Rolled, At(20, kt: 60)); // parked only 20 s: never started, but the roll counts
+        Assert.Equal(GroundDecision.None, At(25, kt: 120)); // once
+        Assert.Equal(GroundDecision.None, At(30, kt: 140));
+    }
+
+    [Fact]
+    public void The_takeoff_roll_drops_the_departures_requests_whether_or_not_the_prewarm_ran()
+    {
+        var plan = Task.FromResult<FlightPlan?>(new FlightPlan(Eddv, Eddf, null, []));
+        var t0 = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        CameraReport At(double seconds, double kt) =>
+            new(Eddv.Lat, Eddv.Lon, 3, null, kt > 0 ? new Motion(kt / 1.943844, 270) : null, false, t0.AddSeconds(seconds));
+
+        // Taxied out at once: the pre-warm never started, the departure's requests still go.
+        int ground = 0, departure = 0;
+        var target = new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _) => (0, 0), () => ++ground, () => ++departure);
+        var prewarm = new GroundPrewarm(plan, [target]);
+        prewarm.OnCamera(At(0, 10));
+        prewarm.OnCamera(At(60, 60));
+        Assert.Equal((0, 1), (ground, departure));
+        prewarm.OnCamera(At(70, 120));
+        Assert.Equal((0, 1), (ground, departure)); // once
+
+        // Parked long enough: the pre-warm ran, and the roll drops both.
+        int ground2 = 0, departure2 = 0;
+        var target2 = new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _) => (0, 0), () => ++ground2, () => ++departure2);
+        var ran = new GroundPrewarm(plan, [target2]);
+        ran.OnCamera(At(0, 0));
+        ran.OnCamera(At(31, 0)); // starts (queues nothing: the package has no scenery here)
+        ran.OnCamera(At(600, 60));
+        Assert.True(ground2 >= 1 && departure2 >= 1, $"ground {ground2}, departure {departure2}");
+    }
+
     // ---------------------------------------------------------------- what it queues
 
     private sealed record Call(int Phase, int Textures, double FirstDistanceM);
@@ -189,7 +232,7 @@ public sealed class GroundPrewarmTests : IDisposable
         {
             calls.Add(new Call(phase, textures.Count, place(Eddv.Lat, Eddv.Lon).DistanceM));
             return (textures.Count, 0);
-        }, () => 0);
+        }, () => 0, () => 0);
         return (target, calls);
     }
 

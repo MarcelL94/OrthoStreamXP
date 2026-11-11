@@ -510,6 +510,26 @@ public sealed class StreamingTests : IDisposable
     }
 
     [Fact]
+    public void The_takeoff_roll_drops_only_the_departures_requests_still_waiting()
+    {
+        Setup s = Streaming();
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+        StreamedTexture here = s.Streamer.Get(Texture())!;
+        VirtualPath flightPath = Texture("21904_35856_BI16"), arrival = Texture("21904_36144_BI16");
+        (double, double) Beside(double lat, double lon) => (0, 0);
+
+        warmer.PrefetchAround([Texture()], here.Lat, here.Lon);
+        warmer.Prefetch([flightPath]);
+        warmer.PrefetchGround([arrival], Beside, GroundPrewarm.Arrival);
+
+        Assert.Equal(1, warmer.CancelDeparture());
+        Assert.Null(warmer.WaitingFor(Texture()));
+        Assert.NotNull(warmer.WaitingFor(flightPath)); // the flight-path prefetch is not the departure's
+        Assert.Equal(1, warmer.GroundWaiting);
+        Assert.Equal(0, warmer.CancelDeparture());
+    }
+
+    [Fact]
     public void The_ground_prewarm_ranks_after_the_departure_and_is_dropped_for_the_takeoff()
     {
         Setup s = Streaming();

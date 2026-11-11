@@ -1,6 +1,10 @@
 namespace OrthoStreamXP.Scenery;
 
-internal enum GroundDecision { None, Start, Stop }
+/// <summary>
+/// What the ground pre-warm does now. <see cref="Stop"/>: it ran, and the aircraft rolls for takeoff.
+/// <see cref="Rolled"/>: the aircraft rolls for takeoff before it ever ran (said once); only the departure's requests go.
+/// </summary>
+internal enum GroundDecision { None, Start, Stop, Rolled }
 
 /// <summary>
 /// When the ground pre-warm runs: once, after the aircraft has stood still at the flight plan's departure for a while
@@ -18,6 +22,7 @@ internal sealed class GroundWatch(double departureLat, double departureLon)
 
     private State _state;
     private DateTime? _parkedSince;
+    private bool _rolled;
 
     /// <param name="speedKt">Ground speed; null when X-Plane's positions have not moved enough to tell (standing still).</param>
     /// <param name="heightM">The camera's height above the ground.</param>
@@ -29,7 +34,13 @@ internal sealed class GroundWatch(double departureLat, double departureLon)
             case State.Running:
                 if (speed <= RollingKt) return GroundDecision.None;
                 _state = State.Done;
+                _rolled = true;
                 return GroundDecision.Stop;
+            case State.Waiting when !_rolled && !inferred && speed > RollingKt:
+                // Not parked long enough to start (or not at the departure): the roll still ends the departure's requests.
+                _rolled = true;
+                _parkedSince = null;
+                return GroundDecision.Rolled;
             case State.Waiting:
                 bool parked = !inferred && speed <= ParkedKt && heightM <= OnGroundM
                               && Geo.DistanceM(departureLat, departureLon, lat, lon) <= NearDepartureKm * 1000;
@@ -51,9 +62,10 @@ internal sealed class GroundWatch(double departureLat, double departureLon)
 /// <summary>A mounted package as the ground pre-warm sees it: its DSFs, and how to queue and drop textures in its load-ahead.</summary>
 /// <param name="Prefetch">Queues textures placed by (distance X-Plane will see them from, order) at a phase (<see cref="MipWarmer.PrefetchGround"/>).</param>
 /// <param name="Cancel">Drops the ground pre-warm's textures still waiting; returns how many.</param>
+/// <param name="CancelDeparture">Drops the SimBrief departure's textures still waiting; returns how many.</param>
 internal sealed record GroundTarget(string Name, string Source,
     Func<IReadOnlyList<VirtualPath>, Func<double, double, (double DistanceM, double Order)>, int, (int Queued, int Had)> Prefetch,
-    Func<int> Cancel);
+    Func<int> Cancel, Func<int> CancelDeparture);
 
 /// <summary>
 /// The ground pre-warm: while the aircraft stands at the departure, the scenery of the rest of the flight is built into
@@ -92,6 +104,10 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
             case GroundDecision.Stop:
                 _stopped = true;
                 Cancel();
+                break;
+            case GroundDecision.Rolled:
+                int dropped = targets.Sum(t => t.CancelDeparture());
+                Log.Info($"SimBrief: the aircraft is rolling for takeoff; {dropped} departure textures still waiting were dropped, load-ahead takes over");
                 break;
         }
     }
@@ -160,8 +176,9 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
 
     private void Cancel()
     {
-        int dropped = targets.Sum(t => t.Cancel());
-        Log.Info($"Ground pre-warm: the aircraft is rolling for takeoff; {dropped} textures still waiting were dropped, load-ahead takes over");
+        int dropped = targets.Sum(t => t.Cancel()), departure = targets.Sum(t => t.CancelDeparture());
+        Log.Info($"Ground pre-warm: the aircraft is rolling for takeoff; {dropped} textures still waiting were dropped " +
+                 $"(and {departure} of the departure), load-ahead takes over");
     }
 
     private static string Name(FlightOrigin airport) => airport.Icao.Length > 0 ? airport.Icao : $"{airport.Lat:F3}, {airport.Lon:F3}";
