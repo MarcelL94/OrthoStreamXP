@@ -94,7 +94,9 @@ Never claim a test passed without running it.
         A new OFP (`params.request_id`, else `time_generated`) drops the old plan's waiting ground requests, and its
         departure ones when the origin moved (then the new departure is prefetched); `GroundPrewarm.UsePlan` re-arms the
         watch. Not run in the real window yet: check the button's look and the status text on the next RC.
-15. [ ] **Alternate behind its own switch** (default off), as the maintainer asked (PR structure step 3). F5 backs it.
+15. [x] **Alternate behind its own switch** (default off), as the maintainer asked (PR structure step 3). F5 backs it.
+        `simbrief-alternate = on|off` (default off), in the schema, setting names and example ini. Not on the Settings page
+        yet (ini only, like the radius); say so in D3.
 16. [ ] **M4**: not seen in flight (F7). Only if R6 is agreed: use real ground speed or on-ground data instead of the
         camera's motion.
 17. [ ] **Minor items** L1-L5, L8-L12 where cheap.

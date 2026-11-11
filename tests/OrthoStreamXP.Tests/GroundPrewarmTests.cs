@@ -373,6 +373,16 @@ public sealed class GroundPrewarmTests : IDisposable
     }
 
     [Fact]
+    public void The_alternate_is_left_out_unless_it_is_switched_on()
+    {
+        // The maintainer's PR structure, step 3: the alternate is rarely flown, so it is behind its own switch.
+        var (target, calls) = Package(Everywhere);
+        new GroundPrewarm(Task.FromResult<FlightPlan?>(null), [target], alternate: false).Queue(new FlightPlan(Eddv, Eddf, Eddk, ClimbSouth()));
+
+        Assert.Equal([GroundPrewarm.Arrival, GroundPrewarm.Route], calls.Select(c => c.Phase));
+    }
+
+    [Fact]
     public void An_alternate_that_is_the_arrival_is_not_built_twice()
     {
         // b) SimBrief plans with the destination as the alternate.

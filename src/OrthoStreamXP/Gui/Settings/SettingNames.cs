@@ -25,6 +25,7 @@ internal static class SettingNames
         ["simbrief-user"] = "SimBrief departure prefetch",
         ["simbrief-radius-km"] = "SimBrief departure prefetch",
         ["simbrief-max-mb"] = "SimBrief prefetch download limit",
+        ["simbrief-alternate"] = "SimBrief alternate airport",
     };
 
     /// <summary>Settings the running streaming does not use: changing them never needs a restart.</summary>

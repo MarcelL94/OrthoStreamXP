@@ -75,8 +75,9 @@ internal sealed record GroundTarget(string Name, string Source,
 /// </summary>
 /// <param name="stop">The session's stop: no queuing after it, and a <see cref="Queue"/> in progress ends early.</param>
 /// <param name="run">Runs the queuing off X-Plane's UDP thread (<see cref="Task.Run(Action)"/> when null; tests run it inline).</param>
+/// <param name="alternate">The alternate is built too (<c>simbrief-alternate</c>); off, it is left out with a log line.</param>
 internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<GroundTarget> targets, Func<Action, Task>? run = null,
-    CancellationToken stop = default)
+    bool alternate = true, CancellationToken stop = default)
 {
     public const int Arrival = 0, Alternate = 1, Route = 2;
 
@@ -191,14 +192,16 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
                 else
                     queued += Area(target, to, Arrival, "arrival", generation);
             }
-            if (flight.Alternate is { } alternate)
+            if (flight.Alternate is { } other)
             {
-                if (flight.Destination is { } arrival && FlightPlan.SamePlace(alternate, arrival))
-                    Log.Info($"Ground pre-warm: the alternate {Name(alternate)} is the arrival; nothing more to build ({target.Name})");
-                else if (FlightPlan.SamePlace(alternate, flight.Origin))
-                    Log.Info($"Ground pre-warm: the alternate {Name(alternate)} is the departure; its scenery is the departure's ({target.Name})");
+                if (!alternate)
+                    Log.Info($"Ground pre-warm: the alternate {Name(other)} is left out (simbrief-alternate = off) ({target.Name})");
+                else if (flight.Destination is { } arrival && FlightPlan.SamePlace(other, arrival))
+                    Log.Info($"Ground pre-warm: the alternate {Name(other)} is the arrival; nothing more to build ({target.Name})");
+                else if (FlightPlan.SamePlace(other, flight.Origin))
+                    Log.Info($"Ground pre-warm: the alternate {Name(other)} is the departure; its scenery is the departure's ({target.Name})");
                 else
-                    queued += Area(target, alternate, Alternate, "alternate", generation);
+                    queued += Area(target, other, Alternate, "alternate", generation);
             }
             queued += Climb(target, flight, generation);
         }

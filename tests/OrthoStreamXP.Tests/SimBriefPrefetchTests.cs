@@ -413,5 +413,10 @@ public sealed class SimBriefPrefetchTests : IDisposable
         Assert.Equal(0, Parse("simbrief-max-mb = 0").SimBriefMaxMb);
         Assert.Equal(250, Parse("simbrief-max-mb = 250").SimBriefMaxMb);
         Assert.Throws<SettingsException>(() => Parse("simbrief-max-mb = -1"));
+
+        // The alternate: off unless switched on.
+        Assert.False(Parse().SimBriefAlternate);
+        Assert.True(Parse("simbrief-alternate = on").SimBriefAlternate);
+        Assert.Throws<SettingsException>(() => Parse("simbrief-alternate = maybe"));
     }
 }

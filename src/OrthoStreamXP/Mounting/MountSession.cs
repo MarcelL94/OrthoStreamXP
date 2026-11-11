@@ -237,7 +237,8 @@ internal sealed class MountSession : IDisposable
                 if (mount.Warmer is { } warmer) warmer.GroundDone += memory.OnGroundDone;
         }
         var simBrief = new SimBriefSession(ct => client.FetchAsync(user, ct), targets, ground,
-            () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, _settings.SimBriefRadiusKm, stop: _summaries.Token);
+            () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, _settings.SimBriefRadiusKm,
+            alternate: _settings.SimBriefAlternate, stop: _summaries.Token);
         _simBriefSession = simBrief;
         simBrief.Start();
     }
