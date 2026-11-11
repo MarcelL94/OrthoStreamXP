@@ -302,5 +302,12 @@ public sealed class SimBriefPrefetchTests : IDisposable
         Assert.Equal(20, Parse("simbrief-radius-km = 20").SimBriefRadiusKm);
         Assert.Throws<SettingsException>(() => Parse("simbrief-radius-km = 0"));
         Assert.Throws<SettingsException>(() => Parse("simbrief-radius-km = 51"));
+
+        // R4: the download budget, 1000 MB unless set; 0 is no limit.
+        Assert.Equal(MountSettings.DefaultSimBriefMaxMb, Parse().SimBriefMaxMb);
+        Assert.Equal(1000, MountSettings.DefaultSimBriefMaxMb);
+        Assert.Equal(0, Parse("simbrief-max-mb = 0").SimBriefMaxMb);
+        Assert.Equal(250, Parse("simbrief-max-mb = 250").SimBriefMaxMb);
+        Assert.Throws<SettingsException>(() => Parse("simbrief-max-mb = -1"));
     }
 }

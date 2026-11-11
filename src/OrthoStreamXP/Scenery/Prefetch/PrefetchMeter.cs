@@ -15,6 +15,9 @@ internal sealed class PrefetchMeter(string phase)
 
     public string Phase { get; } = phase;
 
+    /// <summary>The session's download budget its builds spend from; null when there is none.</summary>
+    public PrefetchBudget? Budget { get; set; }
+
     public int Queued => _queued.Count;
 
     public long Had => Interlocked.Read(ref _had);
@@ -48,6 +51,7 @@ internal sealed class PrefetchMeter(string phase)
         Interlocked.Add(ref _tiles, tiles);
         Interlocked.Add(ref _bytes, bytes);
         Interlocked.Add(ref _buildTicks, took.Ticks);
+        Budget?.Spend(bytes);
     }
 
     /// <summary>X-Plane loaded a texture: a hit when this phase queued it.</summary>

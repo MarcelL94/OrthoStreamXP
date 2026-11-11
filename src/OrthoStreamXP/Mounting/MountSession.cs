@@ -222,6 +222,11 @@ internal sealed class MountSession : IDisposable
         AircraftPositionListener? listener = _listener;
         CancellationToken stop = _summaries.Token;
         // One flight plan for the departure prefetch and the ground pre-warm.
+        if (_settings.SimBriefMaxMb > 0)
+        {
+            var budget = new PrefetchBudget(_settings.SimBriefMaxMb * 1024L * 1024);
+            foreach (PackageMount mount in _mounts) mount.Warmer?.UseBudget(budget);
+        }
         Task<FlightPlan?> plan = client.LatestPlanAsync(user, stop);
         var prefetch = new DeparturePrefetch(plan.WaitAsync,
             () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, targets, _settings.SimBriefRadiusKm);

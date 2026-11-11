@@ -24,6 +24,7 @@ internal static class SettingNames
         ["xplane-arguments"] = "X-Plane start options",
         ["simbrief-user"] = "SimBrief departure prefetch",
         ["simbrief-radius-km"] = "SimBrief departure prefetch",
+        ["simbrief-max-mb"] = "SimBrief prefetch download limit",
     };
 
     /// <summary>Settings the running streaming does not use: changing them never needs a restart.</summary>

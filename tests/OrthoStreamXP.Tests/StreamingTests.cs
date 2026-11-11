@@ -580,6 +580,44 @@ public sealed class StreamingTests : IDisposable
     }
 
     [Fact]
+    public async Task Once_the_download_budget_is_spent_the_prefetch_stops_and_load_ahead_goes_on()
+    {
+        // R4: a 1-byte budget is spent by the first build; the rest of the prefetch is left to load-ahead.
+        Setup s = Streaming();
+        var catalog = new TextureCatalog();
+        using var warmer = new MipWarmer(catalog, s.Streamer, s.View, heavy: 2);
+        var budget = new PrefetchBudget(1);
+        warmer.UseBudget(budget);
+        (double, double) Far(double lat, double lon) => (500_000, 0); // base tiles only: one build each
+        VirtualPath first = Texture("21904_36144_BI16"), second = Texture("21824_35824_BI16");
+        StreamedTexture firstTexture = s.Streamer.Get(first)!;
+
+        warmer.PrefetchGround([first], Far, GroundPrewarm.Arrival);
+        await Until(() =>
+        {
+            warmer.StartWhatFits();
+            return budget.Exhausted;
+        });
+        Assert.True(s.Streamer.RealFrom(firstTexture) <= firstTexture.BaseMip);
+
+        warmer.StartWhatFits(); // drops what is left, logs once
+        Assert.Equal((0, 0), warmer.PrefetchGround([second], Far, GroundPrewarm.Route));
+        Assert.Null(warmer.WaitingFor(second));
+
+        catalog.AddTerrain(VirtualPath.Of("terrain", "21824_35824_BI16.ter")); // X-Plane loads it: load-ahead still fetches it
+        Assert.NotNull(warmer.WaitingFor(second));
+        long spent = budget.SpentBytes;
+        StreamedTexture secondTexture = s.Streamer.Get(second)!;
+        await Until(() =>
+        {
+            warmer.StartWhatFits();
+            return s.Streamer.RealFrom(secondTexture) <= secondTexture.BaseMip;
+        });
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.Equal(spent, budget.SpentBytes); // load-ahead never counts
+    }
+
+    [Fact]
     public void The_takeoff_roll_drops_only_the_departures_requests_still_waiting()
     {
         Setup s = Streaming();

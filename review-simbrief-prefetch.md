@@ -84,7 +84,10 @@ Never claim a test passed without running it.
         Left as they are for now: not seen in flight. The step 10 logging (pass time and queue size, builds running at
         the roll) answers them on the next cold-cache or slow-line flight; reopen if a pass takes more than ~50 ms or
         ground builds still hold detailed places at the roll.
-12. [ ] **R4**: the per-session download budget for the prefetch (setting, counter in the downloader, log when used up).
+12. [x] **R4**: the per-session download budget for the prefetch (setting, counter in the downloader, log when used up).
+        `simbrief-max-mb`, default 1000 MB (user, 2026-11-11), 0 = no limit. `PrefetchBudget` shared by every package,
+        spent by the phase meters' build bytes; then each warmer drops its waiting SimBrief requests and queues no more.
+        Not covered: the whole-texture fallback without mip streaming (as in H4). Revisit the default with the R12 numbers.
 13. [ ] **R5**: unflown areas rank as least recently used in `CacheAreas.Trim`, plus a test (F5).
 14. [ ] **M1 / R9**: the "Reload SimBrief flight plan" button on Home (button only, no automatic fetch), plus its tests.
 15. [ ] **Alternate behind its own switch** (default off), as the maintainer asked (PR structure step 3). F5 backs it.
@@ -248,7 +251,7 @@ one from the fresh branch once R1 and R2 are done.
 | R1 | Gate pre-warm must never delay real reads | **Open** (H1 done, H3 to measure) | Fix H1 (ground requests block load-ahead) and H3 (ground builds hold the heavy slots), measure H2 |
 | R2 | Departure prefetch at about `Warm` | Done | Near textures get `NearWarm` today (`MipWarmer.cs:189` via `PriorityOf`, `:215`); cap departure at `FetchPriority.Warm` |
 | R3 | Gate pre-warm at `Background` or below | Done | `GroundPriority` = 401-403, below `Background` (400) |
-| R4 | Download budget per session | **Open**, new | See below |
+| R4 | Download budget per session | Done | `simbrief-max-mb` (default 1000 MB), step 12 |
 | R5 | Pre-warm must not evict what was just built | Partly; **open** for a related issue | See below |
 | R6 | Reuse the existing models | **Open**, ask him | See below |
 | R7 | User-Agent `orthostreamxp/<version>` like the tile downloads | Done (L6) | One shared constant for the tile downloads, the Setup test and SimBrief |

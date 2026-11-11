@@ -60,6 +60,9 @@ internal sealed class MipWarmer : IDisposable
     private readonly PrefetchMeter[] _groundMeters = [new("arrival"), new("alternate"), new("climb")];
     /// <summary>The ground pre-warm's builds running now (for the takeoff roll's log line, H3).</summary>
     private int _groundRunning;
+    private PrefetchBudget? _budget;
+    /// <summary>The budget ran out and this package's SimBrief requests were dropped.</summary>
+    private bool _budgetSpent;
     /// <summary>Passes of <see cref="StartWhatFits"/> and their longest time since the last log (H2).</summary>
     private int _passes;
     private TimeSpan _longestPass;
@@ -125,6 +128,14 @@ internal sealed class MipWarmer : IDisposable
         _departureMeter.NoteLoaded(entry.Texture);
         foreach (PrefetchMeter meter in _groundMeters) meter.NoteLoaded(entry.Texture);
         Add(new Request(entry.Texture));
+    }
+
+    /// <summary>The SimBrief prefetch spends from <paramref name="budget"/> (shared by every package); set before it queues anything.</summary>
+    public void UseBudget(PrefetchBudget budget)
+    {
+        _budget = budget;
+        _departureMeter.Budget = budget;
+        foreach (PrefetchMeter meter in _groundMeters) meter.Budget = budget;
     }
 
     /// <summary>The SimBrief prefetch's phases this session, in their order.</summary>
@@ -229,6 +240,7 @@ internal sealed class MipWarmer : IDisposable
         var requests = new List<Request>(textures.Count);
         int had = 0;
         PrefetchMeter meter = phase is int which ? _groundMeters[which] : _departureMeter;
+        if (_budget is { Exhausted: true }) return (0, 0); // spent: left to load-ahead
         foreach (VirtualPath texture in textures)
         {
             if (_streamer.Get(texture) is not { } t) continue;
@@ -369,6 +381,7 @@ internal sealed class MipWarmer : IDisposable
     /// <summary>Starts the most urgent waiting textures while there is room for them.</summary>
     internal void StartWhatFits()
     {
+        DropPrefetchOverBudget();
         Request[] waiting;
         lock (_gate) waiting = [.. _waiting.Values];
         if (waiting.Length == 0) return;
@@ -384,6 +397,11 @@ internal sealed class MipWarmer : IDisposable
                 continue;
             }
             if (_stepping.ContainsKey(request.Texture.Key)) continue; // its base tile is on the way
+            if (request.Meter is not null && _budgetSpent)
+            {
+                Remove(request); // queued in the moment the budget ran out
+                continue;
+            }
             BuildKind kind = KindOf(t.Texture, t.Mip);
             if (Full(kind)) continue;
             if (_streamer.RealFrom(t.Texture) <= t.Mip)
@@ -426,6 +444,18 @@ internal sealed class MipWarmer : IDisposable
     }
 
     private static bool Succeeded(Task<bool> build) => build.IsCompletedSuccessfully && build.Result;
+
+    /// <summary>Once the download budget is spent: the SimBrief requests still waiting go, and that is logged once.</summary>
+    private void DropPrefetchOverBudget()
+    {
+        if (_budgetSpent || _budget is not { Exhausted: true } budget) return;
+        _budgetSpent = true;
+        int dropped = Drop(static r => r.Meter is not null);
+        if (dropped > 0) _groundPending = false; // not all built: nothing to give back for
+        if (budget.FirstToReport())
+            Log.Info($"SimBrief prefetch: the download budget of {budget.LimitBytes / (1024 * 1024)} MB is used up " +
+                     $"(simbrief-max-mb); {dropped} textures still waiting are left to load-ahead");
+    }
 
     /// <summary>
     /// H2: while the ground pre-warm has work queued (the biggest queue), how long a pass takes ranking and probing it,
