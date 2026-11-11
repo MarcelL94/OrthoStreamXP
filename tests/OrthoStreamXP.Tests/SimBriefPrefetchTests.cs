@@ -355,6 +355,30 @@ public sealed class SimBriefPrefetchTests : IDisposable
     }
 
     [Fact]
+    public async Task Home_is_told_the_flight_plan_found_at_the_start_or_why_there_is_none()
+    {
+        var (found, _, _, _) = Session(() => Task.FromResult(Answer(Eddm, Egll, "4")));
+        Assert.StartsWith("Flight plan: EDDM → EGLL", await found.DescribeFirstAsync(), StringComparison.Ordinal);
+
+        var (none, _, _, _) = Session(() => Task.FromResult(SimBriefAnswer.Failed("no flight plan yet")));
+        Assert.Equal("No flight plan: no flight plan yet.", await none.DescribeFirstAsync());
+    }
+
+    [Theory]
+    [InlineData(null, "1000", 5)]
+    [InlineData(3000, "3000", 5)]
+    [InlineData(1500, "1500", 6)] // set by hand in the file: kept, offered first
+    public void The_setup_offers_the_download_limits_and_keeps_one_set_by_hand(int? current, string first, int count)
+    {
+        IReadOnlyList<OrthoStreamXP.Gui.Choice> choices = OrthoStreamXP.Gui.SimBriefText.LimitChoices(current);
+
+        Assert.Equal(count, choices.Count);
+        Assert.Contains(choices, c => c.Value == (current?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "1000"));
+        Assert.Contains(choices, c => c.Value == "0"); // no limit
+        if (count == 6) Assert.Equal(first, choices[0].Value);
+    }
+
+    [Fact]
     public void No_flight_plan_queues_nothing()
     {
         var prefetch = new DeparturePrefetch(() => null,

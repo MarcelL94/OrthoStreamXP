@@ -246,6 +246,9 @@ internal sealed class MountSession : IDisposable
     /// <summary>The Home page's "Reload SimBrief flight plan": what came of it, in the window's words; null without SimBrief.</summary>
     public Task<string>? ReloadFlightPlanAsync() => _stopped ? null : _simBriefSession?.ReloadAsync();
 
+    /// <summary>The flight plan fetched as streaming started, in the window's words; null without SimBrief.</summary>
+    public Task<string>? FirstFlightPlanAsync() => _stopped ? null : _simBriefSession?.DescribeFirstAsync();
+
     /// <summary>The paging model's k from X-Plane's screen last time: the first guess at the next start.</summary>
     private const string PagingScreenFile = "paging-screen-k.txt";
 

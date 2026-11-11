@@ -16,6 +16,7 @@ internal sealed class SimBriefSession
     private readonly List<Task> _work = [];
     private FlightPlan? _current;
     private Task<string>? _reload;
+    private string _firstNoPlan = "";
 
     /// <param name="fetch">Asks SimBrief for the latest flight plan (<see cref="SimBriefClient.FetchAsync"/>).</param>
     /// <param name="groundTargets">The packages the ground pre-warm queues in; empty: no ground pre-warm.</param>
@@ -82,8 +83,30 @@ internal sealed class SimBriefSession
     {
         SimBriefAnswer answer = await _fetch(_stop).ConfigureAwait(false);
         if (answer.Problem is { } problem) Log.Warning($"SimBrief: {problem}");
-        lock (_gate) _current ??= answer.Plan;
+        lock (_gate)
+        {
+            _current ??= answer.Plan;
+            _firstNoPlan = answer.NoPlan;
+        }
         return answer.Plan;
+    }
+
+    /// <summary>
+    /// The plan fetched as streaming started, in the window's words ("Flight plan: EDDV → ENGM, generated 12 min ago."),
+    /// or why there is none: Home shows it while the SimBrief switch is on.
+    /// </summary>
+    public async Task<string> DescribeFirstAsync()
+    {
+        try
+        {
+            if (await FirstPlan.ConfigureAwait(false) is not { } plan)
+                lock (_gate) return _firstNoPlan;
+            return $"Flight plan: {plan.Describe()}{Age(plan)}.";
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+        {
+            return "Streaming stopped.";
+        }
     }
 
     private async Task<string> ReloadOnceAsync()

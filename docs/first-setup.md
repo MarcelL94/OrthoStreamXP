@@ -89,7 +89,7 @@ Internet speed changes during the day, so you can repeat the test later in [Sett
 
 ## 6. SimBrief
 
-Optional. If you plan your flights with SimBrief, enter your SimBrief username or Pilot ID: OrthoStreamXP then builds your flight's scenery before X-Plane needs it, the departure when streaming starts and the arrival and climb while you sit at the gate. Click **Test SimBrief connection** to check that your latest flight plan is found. Leave the field empty to skip this. See [SimBrief](simbrief.md).
+Optional. If you plan your flights with SimBrief, enter your SimBrief username or Pilot ID: OrthoStreamXP then builds your flight's scenery before X-Plane needs it, the departure when streaming starts and the arrival and climb while you sit at the gate. Click **Test SimBrief connection** to check that your latest flight plan is found. Once a username is entered, you can also choose the **download limit per session** and whether to **also build the alternate airport** (see [Why there is a download limit](simbrief.md#why-there-is-a-download-limit)). Leave the field empty to skip this. See [SimBrief](simbrief.md).
 
 ## 7. Ready
 

@@ -63,9 +63,22 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
             Field("xplane-arguments", "X-Plane start options",
                 "Added when OrthoStreamXP starts X-Plane (Start and fly), such as --allow_reshade. Takes effect the next time X-Plane is started.",
                 FieldKind.Text, placeholder: "--allow_reshade"),
-            Field("simbrief-user", "SimBrief username",
-                "Your SimBrief username or Pilot ID. When streaming starts, the photos around the departure airport of your latest SimBrief flight plan are built before X-Plane loads them; while the aircraft stands at the gate, the arrival and the climb follow. Photos already in the cache are skipped. Leave it empty to turn this off.",
-                FieldKind.Text, placeholder: "username or Pilot ID"),
+        ];
+        SimBriefUser = Field("simbrief-user", "SimBrief username",
+            "Your SimBrief username or Pilot ID (the number in your SimBrief account settings). When streaming starts, the photos around the departure airport of your latest SimBrief flight plan are built before X-Plane loads them; while the aircraft stands at the gate, the arrival and the climb follow. Photos already in the cache are skipped. Leave it empty to turn this off.",
+            FieldKind.Text, placeholder: "username or Pilot ID");
+        SimBriefTest = new SimBriefTestViewModel(_main.MeshHttp, () => SimBriefUser.Value);
+        SimBriefUser.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SettingField.Value)) SimBriefTest.Reset();
+        };
+        SimBrief =
+        [
+            Field("simbrief-max-mb", "Download limit per session",
+                SimBriefText.LimitHelp + " Enter the MB, from 0 (no limit) to 100000.",
+                FieldKind.Number, min: 0, max: 100_000),
+            Field("simbrief-alternate", "Also build the alternate airport", SimBriefText.AlternateHelp,
+                FieldKind.Toggle, on: "on", off: "off"),
         ];
         ConnectionTest = new ConnectionTestViewModel(
             () => _document.Get("texture-provider") ?? "bing,esri",
@@ -101,6 +114,15 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
     public IReadOnlyList<PresetOption> Presets { get; }
     public IReadOnlyList<Choice> Providers { get; }
     public IReadOnlyList<SettingField> Other { get; }
+
+    /// <summary>The SimBrief tab's username; the test below it asks SimBrief with what is typed there.</summary>
+    public SettingField SimBriefUser { get; }
+
+    /// <summary>The SimBrief tab's "Test SimBrief connection".</summary>
+    public SimBriefTestViewModel SimBriefTest { get; }
+
+    /// <summary>The SimBrief tab's download limit and alternate airport.</summary>
+    public IReadOnlyList<SettingField> SimBrief { get; }
     public ICommand BrowseXPlane { get; }
     public ICommand BrowsePackages { get; }
     public ICommand BrowseCache { get; }
@@ -478,7 +500,7 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
         CustomLevelNote = QualityPreset.ForLevel(level) is null
             ? $"Your settings file uses level-change {level}, which is not one of these. Choosing one replaces it."
             : null;
-        foreach (SettingField field in Other)
+        foreach (SettingField field in Other.Append(SimBriefUser).Concat(SimBrief))
             field.Load(_document.Get(field.Key), Default(field.Key));
         ConfirmingReset = false;
         foreach (string name in new[]
@@ -549,6 +571,8 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
     private static string Default(string key) => key switch
     {
         "scenery-packs" => "on",
+        "simbrief-max-mb" => MountSettings.DefaultSimBriefMaxMb.ToString(CultureInfo.InvariantCulture),
+        "simbrief-alternate" => "off",
         _ => "",
     };
 }

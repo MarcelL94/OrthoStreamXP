@@ -107,6 +107,9 @@ internal sealed class MountController : ObservableObject
     /// <summary>Asks SimBrief for the latest flight plan again (the Home page's button); what came of it, or null without one.</summary>
     public Task<string>? ReloadFlightPlanAsync() => State == MountState.Running ? _session?.ReloadFlightPlanAsync() : null;
 
+    /// <summary>The flight plan the running session fetched as it started (Home's SimBrief line), or null without one.</summary>
+    public Task<string>? FirstFlightPlanAsync() => State == MountState.Running ? _session?.FirstFlightPlanAsync() : null;
+
     /// <summary>The flight report of the session stopped last in this window (null before one stops, or without a flight).</summary>
     public Tuning.FlightReport? LastReport { get; private set; }
 

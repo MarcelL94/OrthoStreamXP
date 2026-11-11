@@ -284,7 +284,7 @@
                     </StackPanel.Style>
                     <TextBlock Text="Do you plan your flights with SimBrief?" Style="{StaticResource Heading}" />
                     <TextBlock Style="{StaticResource Secondary}" Margin="0,0,0,16"
-                               Text="Optional. With your SimBrief username, OrthoStreamXP reads your latest flight plan: when streaming starts, the photos around the departure airport are built while X-Plane is still loading, so the view at the gate is sharp sooner; while the aircraft stands at the gate, the arrival and the climb follow. Photos already in the cache are not downloaded again. Leave it empty to skip this; you can change it later in Settings." />
+                               Text="Optional. With your SimBrief username, OrthoStreamXP reads your latest flight plan: when streaming starts, the photos around the departure airport are built while X-Plane is still loading, so the view at the gate is sharp sooner; while the aircraft stands at the gate, the arrival and the climb follow. Photos already in the cache are not downloaded again. Leave it empty to skip this; you can change it later in Settings › SimBrief." />
                     <TextBox Text="{Binding SimBriefUser, UpdateSourceTrigger=PropertyChanged, Delay=300}" AutomationProperties.Name="SimBrief username or Pilot ID" />
                     <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
                                Text="Your SimBrief username, or your Pilot ID (the number in your SimBrief account settings)." />
@@ -315,6 +315,48 @@
                                     AutomationProperties.Name="Test SimBrief connection" />
                         </Grid>
                     </Border>
+                    <!-- Only with a username: how much the prefetch may download, and the alternate -->
+                    <StackPanel Visibility="{Binding HasSimBriefUser, Converter={StaticResource Visible}}">
+                        <Border Style="{StaticResource RowCard}" Margin="0,8,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,24,0">
+                                    <TextBlock Text="Download limit per session" />
+                                    <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap" Text="{x:Static gui:SimBriefText.LimitHelp}" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Width="300" VerticalAlignment="Center" ItemsSource="{Binding SimBriefLimits}" DisplayMemberPath="Label"
+                                          SelectedItem="{Binding SimBriefLimit}" AutomationProperties.Name="SimBrief download limit per session" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource RowCard}" Margin="0,8,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE946;" VerticalAlignment="Top" Margin="0,2,12,0"
+                                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                <TextBlock Grid.Column="1" Style="{StaticResource Caption}" TextWrapping="Wrap" Text="{x:Static gui:SimBriefText.LimitWhy}" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource RowCard}" Margin="0,8,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,24,0">
+                                    <TextBlock Text="Also build the alternate airport" />
+                                    <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap" Text="{x:Static gui:SimBriefText.AlternateHelp}" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Switch}" VerticalAlignment="Center" IsChecked="{Binding SimBriefAlternate}"
+                                          AutomationProperties.Name="Also build the alternate airport" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- 7. Ready -->

@@ -19,11 +19,28 @@ When the aircraft rolls for takeoff (faster than 40 kt), whatever has not starte
 Enter your SimBrief username, or your Pilot ID (the number in your SimBrief account settings):
 
 - in the **SimBrief** step of the [first setup](first-setup.md#6-simbrief), or
-- later in **Settings › Other**, field **SimBrief username**.
+- later in **Settings › SimBrief**.
 
-Click **Test SimBrief connection** in the setup to check that OrthoStreamXP finds your latest flight plan.
+Click **Test SimBrief connection** (in the setup or in Settings) to check that OrthoStreamXP finds your latest flight plan. Both places also have the **download limit per session** and **Also build the alternate airport**.
+
+## Why there is a download limit
+
+The photos come from free map services (Bing, Esri). They are made for looking at maps, not for bulk downloads, and a program that downloads too much can be slowed down or blocked. That would hit every OrthoStreamXP user, not only you. Building a whole flight ahead means thousands of photos before you need any of them, so the SimBrief prefetch gets a budget per streaming session. It also protects a metered or slow connection.
+
+When the limit is reached nothing breaks: the rest loads as usual while you fly. Your own flying never counts against it.
+
+| Your situation | Limit |
+|---|---|
+| Metered or mobile connection | 300 MB |
+| Slow connection | 500 MB |
+| A typical flight at High or Ultra | 1000 MB (default) |
+| Extra quality (about four times the downloads near airports), or the alternate airport on | 3000 MB |
+
+If the log says *the download budget ... is used up* on your flights, raise the limit a step. **No limit** (`0`) is not recommended.
 
 ## On the Home page
+
+While **Build my SimBrief flight's scenery ahead** is on, the line below the buttons says what OrthoStreamXP knows about your flight: before the start that the plan is read then, after it the flight found (for example *Flight plan: EDDM → EGLL, generated 12 min ago*) or why there is none, and after a reload what the reload found.
 
 - **Build my SimBrief flight's scenery ahead.** Turn this off to skip SimBrief for one session. It can be changed while streaming is stopped and is on again the next time OrthoStreamXP opens. With **Start when OrthoStreamXP opens** on, streaming starts before you can turn it off.
 - **Reload SimBrief flight plan.** OrthoStreamXP reads your flight plan once, when streaming starts. If you generated it afterwards, or planned another flight, press this button: OrthoStreamXP asks SimBrief for your latest flight plan and builds its scenery. The text next to the button says what it found, for example *Loaded EDDM → EGLL, generated 12 min ago*. SimBrief is asked only when you press it, never on its own.
