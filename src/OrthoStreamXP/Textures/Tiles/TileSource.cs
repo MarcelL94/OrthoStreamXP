@@ -150,7 +150,7 @@ internal sealed class TileSource : IDisposable
             AutomaticDecompression = DecompressionMethods.None,
         })
         { Timeout = TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 1, 120)) };
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("orthostreamxp/0.2");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd(HttpIdentity.UserAgent);
     }
 
     /// <summary>The provider names in the order they are tried, e.g. "esri,bing".</summary>

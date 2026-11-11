@@ -218,7 +218,6 @@ internal sealed class MountSession : IDisposable
             return;
         }
         _simBrief = new HttpClient();
-        _simBrief.DefaultRequestHeaders.UserAgent.ParseAdd("orthostreamxp");
         var client = new SimBriefClient(_simBrief);
         AircraftPositionListener? listener = _listener;
         CancellationToken stop = _summaries.Token;

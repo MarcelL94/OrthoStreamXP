@@ -48,7 +48,10 @@ internal sealed class SimBriefClient(HttpClient http)
         timeout.CancelAfter(Timeout);
         try
         {
-            using HttpResponseMessage response = await http.GetAsync(UrlFor(user), timeout.Token).ConfigureAwait(false);
+            // The User-Agent goes on the request: the client handed in may be shared and set up for something else.
+            using var request = new HttpRequestMessage(HttpMethod.Get, UrlFor(user));
+            request.Headers.UserAgent.ParseAdd(HttpIdentity.UserAgent);
+            using HttpResponseMessage response = await http.SendAsync(request, timeout.Token).ConfigureAwait(false);
             string body = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
             // SimBrief answers an unknown user with 400 and its reason in fetch.status.
             if (!response.IsSuccessStatusCode && response.StatusCode != HttpStatusCode.BadRequest)

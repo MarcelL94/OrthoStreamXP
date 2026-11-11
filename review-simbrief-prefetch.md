@@ -62,7 +62,9 @@ Never claim a test passed without running it.
        N = 1: the request goes when its base build fails (or is still in its 15 s retry wait). Load-ahead's own
        requests come back with the next move anyway.
 7. [ ] **F3**: give the memory back once the ground queue is empty (ask how first, see "Stop and ask").
-8. [ ] **R7**: one shared `orthostreamxp/<version>` User-Agent for the tile downloads, the Setup test and SimBrief.
+8. [x] **R7**: one shared `orthostreamxp/<version>` User-Agent for the tile downloads, the Setup test and SimBrief.
+       `HttpIdentity.UserAgent`, the app's version. Note: the tile downloads and the connection test sent a fixed
+       `orthostreamxp/0.2` before; they now send the real version (as the mesh downloads already did).
 9. [ ] **R8 test**: problems a `SimBriefAnswer` carries never contain the username or Pilot ID.
 10. [ ] **R12 + measurement logging**: the per-phase summary at mount stop (queued, built, cached, tiles and MB, build
         time, hit rate), plus the H2/H3 measurements from "What to log" (F8: today the prefetch's share of the 7.8 GB
@@ -237,7 +239,7 @@ one from the fresh branch once R1 and R2 are done.
 | R4 | Download budget per session | **Open**, new | See below |
 | R5 | Pre-warm must not evict what was just built | Partly; **open** for a related issue | See below |
 | R6 | Reuse the existing models | **Open**, ask him | See below |
-| R7 | User-Agent `orthostreamxp/<version>` like the tile downloads | **Open** (L6) | One shared constant for the tile downloads, the Setup test and SimBrief |
+| R7 | User-Agent `orthostreamxp/<version>` like the tile downloads | Done (L6) | One shared constant for the tile downloads, the Setup test and SimBrief |
 | R8 | Never log the username or Pilot ID | Done (checked) | No log line contains it, and the URL with `?username=` is never logged. Add a test that the problems `SimBriefAnswer` can carry never contain the user |
 | R9 | Fetch once per mount, plus an explicit re-fetch, no polling | Done for once per mount; **button open** (M1) | Clarified: "explicit" means a **button the user presses whenever they want**. No automatic re-fetch (not even when parked) and no polling. See M1 |
 | R10 | Short timeout, a slow SimBrief never holds up the mount | Done | 10 s, and the fetch runs in the background (L7 dropped) |

@@ -25,9 +25,12 @@ public sealed class SimBriefPrefetchTests : IDisposable
     {
         public Uri? Asked { get; private set; }
 
+        public string? Agent { get; private set; }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Asked = request.RequestUri;
+            Agent = request.Headers.UserAgent.ToString();
             return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
         }
     }
@@ -47,6 +50,20 @@ public sealed class SimBriefPrefetchTests : IDisposable
 
         Assert.Equal(new FlightOrigin("EDDM", Lat, Lon), origin);
         Assert.Equal("https://www.simbrief.com/api/xml.fetcher.php?username=pilot&json=1", asked!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task SimBrief_is_asked_with_the_User_Agent_of_the_tile_downloads()
+    {
+        // R7: one orthostreamxp/<version> for every server, whatever the HttpClient handed in was set up with.
+        using var handler = new StubHandler(HttpStatusCode.OK, Ofp);
+        using var http = new HttpClient(handler);
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("something-else/9");
+
+        await new SimBriefClient(http).FetchAsync("pilot", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpIdentity.UserAgent, handler.Agent);
+        Assert.Matches(@"^orthostreamxp/\d+\.\d+", HttpIdentity.UserAgent);
     }
 
     [Fact]
