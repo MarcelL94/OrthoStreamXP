@@ -14,7 +14,11 @@ internal sealed class AppUpdates
     /// <summary>Where the releases are: the project's GitHub page (betas included, as the first releases are).</summary>
     public const string Repository = "https://github.com/flysimdev/OrthoStreamXP";
 
+    /// <summary>For the release notes of versions whose update carries none; GitHub asks for a user agent.</summary>
+    private static readonly HttpClient Http = CreateHttpClient();
+
     private readonly UpdateManager? _manager;
+    private readonly GithubReleaseNotes _githubNotes = new(Http, Repository["https://github.com/".Length..]);
     private bool _checking;
 
     public AppUpdates()
@@ -38,6 +42,15 @@ internal sealed class AppUpdates
 
     public string? ReadyVersion => Ready?.TargetFullRelease.Version.ToString();
 
+    /// <summary>
+    /// The downloaded version's release notes (Markdown, from release-notes/vX.Y.Z.md): from its update, else from its GitHub
+    /// Release; null when neither has any.
+    /// </summary>
+    public string? ReadyNotes { get; private set; }
+
+    /// <summary>The GitHub Release page of a version.</summary>
+    public static string ReleasePage(string version) => $"{Repository}/releases/tag/v{version}";
+
     /// <summary>Looks for a newer version and downloads it; true when one became ready. Problems (offline, GitHub busy) are only logged.</summary>
     public async Task<bool> CheckAsync()
     {
@@ -48,6 +61,10 @@ internal sealed class AppUpdates
             if (await _manager.CheckForUpdatesAsync().ConfigureAwait(true) is not { } update) return false;
             Log.Info($"OrthoStreamXP {update.TargetFullRelease.Version} is available (this is {CurrentVersion}); downloading it");
             await _manager.DownloadUpdatesAsync(update).ConfigureAwait(true);
+            string? notes = update.TargetFullRelease.NotesMarkdown;
+            ReadyNotes = string.IsNullOrWhiteSpace(notes)
+                ? await _githubNotes.FetchAsync(update.TargetFullRelease.Version.ToString(), CancellationToken.None).ConfigureAwait(true)
+                : notes;
             Ready = update;
             Log.Step($"OrthoStreamXP {ReadyVersion} is downloaded and ready to install");
             return true;
@@ -61,6 +78,14 @@ internal sealed class AppUpdates
         {
             _checking = false;
         }
+    }
+
+    private static HttpClient CreateHttpClient()
+    {
+        var http = new HttpClient();
+        string version = typeof(AppUpdates).Assembly.GetName().Version?.ToString(3) ?? "0";
+        http.DefaultRequestHeaders.UserAgent.ParseAdd($"orthostreamxp/{version}");
+        return http;
     }
 
     /// <summary>Installs the downloaded version and starts OrthoStreamXP again (this process ends).</summary>
