@@ -25,10 +25,11 @@ internal sealed class SimBriefSession
     /// <param name="groundTargets">The packages the ground pre-warm queues in; empty: no ground pre-warm.</param>
     /// <param name="aircraft">Where the aircraft is now, when X-Plane has sent a position.</param>
     /// <param name="run">Runs the ground pre-warm's queuing (tests run it inline).</param>
+    /// <param name="alternate">The ground pre-warm builds the alternate too (<c>simbrief-alternate</c>).</param>
     /// <param name="budget">The download limit (<c>simbrief-download-limit</c>); a reloaded new plan starts it again. Null: no limit.</param>
     public SimBriefSession(Func<CancellationToken, Task<SimBriefAnswer>> fetch, IReadOnlyList<DepartureTarget> departureTargets,
         IReadOnlyList<GroundTarget> groundTargets, Func<(double Lat, double Lon)?> aircraft, double radiusKm,
-        TimeProvider? clock = null, Func<Action, Task>? run = null, PrefetchBudget? budget = null,
+        TimeProvider? clock = null, Func<Action, Task>? run = null, bool alternate = false, PrefetchBudget? budget = null,
         CancellationToken stop = default)
     {
         _fetch = fetch;
@@ -37,7 +38,7 @@ internal sealed class SimBriefSession
         _departure = new DeparturePrefetch(aircraft, departureTargets, radiusKm, _clock);
         _stop = stop;
         FirstPlan = FetchFirstAsync();
-        if (groundTargets.Count > 0) Ground = new GroundPrewarm(FirstPlan, groundTargets, run, stop);
+        if (groundTargets.Count > 0) Ground = new GroundPrewarm(FirstPlan, groundTargets, run, alternate, stop);
     }
 
     /// <summary>The plan fetched as streaming started (null when there was none).</summary>

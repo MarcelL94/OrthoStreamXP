@@ -77,6 +77,8 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
             Field("simbrief-download-limit", "Download limit per session",
                 SimBriefText.LimitHelp + " Enter the MB, from 0 (no limit) to 100000.",
                 FieldKind.Number, min: 0, max: 100_000),
+            Field("simbrief-alternate", "Also build the alternate airport", SimBriefText.AlternateHelp,
+                FieldKind.Toggle, on: "on", off: "off"),
         ];
         ConnectionTest = new ConnectionTestViewModel(
             () => _document.Get("texture-provider") ?? "bing,esri",
@@ -119,7 +121,7 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
     /// <summary>The SimBrief tab's "Test SimBrief connection".</summary>
     public SimBriefTestViewModel SimBriefTest { get; }
 
-    /// <summary>The SimBrief tab's download limit.</summary>
+    /// <summary>The SimBrief tab's download limit and alternate airport.</summary>
     public IReadOnlyList<SettingField> SimBrief { get; }
     public ICommand BrowseXPlane { get; }
     public ICommand BrowsePackages { get; }
@@ -598,6 +600,7 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
     {
         "scenery-packs" => "on",
         "simbrief-download-limit" => MountSettings.DefaultSimBriefDownloadLimitMb.ToString(CultureInfo.InvariantCulture),
+        "simbrief-alternate" => "off",
         _ => "",
     };
 }

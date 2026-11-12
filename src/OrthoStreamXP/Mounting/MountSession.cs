@@ -239,7 +239,7 @@ internal sealed class MountSession : IDisposable
         if (ground.Length > 0) PrewarmMemory.Watch([.. _mounts.Select(m => m.Warmer).OfType<MipWarmer>()], _summaries.Token);
         var simBrief = new SimBriefSession(ct => client.FetchAsync(user, ct), targets, ground,
             () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, _settings.SimBriefRadiusKm,
-            stop: _summaries.Token, budget: budget);
+            alternate: _settings.SimBriefAlternate, stop: _summaries.Token, budget: budget);
         _simBriefSession = simBrief;
         simBrief.Start();
     }

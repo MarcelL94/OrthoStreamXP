@@ -872,7 +872,7 @@ public sealed class StreamingTests : IDisposable
     [Fact]
     public void Around_an_airport_the_order_is_load_aheads_nearest_first()
     {
-        // R6: PrefetchPlanner.Select without motion orders the departure and the arrival.
+        // R6: PrefetchPlanner.Select without motion orders the departure, the arrival and the alternate.
         Setup s = Streaming();
         using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
         StreamedTexture near = s.Streamer.Get(Texture())!;

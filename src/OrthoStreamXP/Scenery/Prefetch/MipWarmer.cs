@@ -64,7 +64,7 @@ internal sealed class MipWarmer : IDisposable
 
     /// <summary>The SimBrief prefetch's phases: the departure, then the ground pre-warm's (index = its phase + 1).</summary>
     private readonly PrefetchMeter[] _phases =
-        [new("departure", ground: false), new("arrival", ground: true), new("climb", ground: true)];
+        [new("departure", ground: false), new("arrival", ground: true), new("alternate", ground: true), new("climb", ground: true)];
     /// <summary>The SimBrief prefetch queued something: X-Plane's loads are checked against it (the hit rate).</summary>
     private volatile bool _prefetched;
     /// <summary>The ground pre-warm's builds running now (for the takeoff roll's log line, H3).</summary>
@@ -173,7 +173,7 @@ internal sealed class MipWarmer : IDisposable
 
     /// <summary>
     /// The scenery X-Plane loads around an airport of the SimBrief flight plan: the departure (<paramref name="phase"/>
-    /// null), or the ground pre-warm's arrival (<see cref="GroundPrewarm.Arrival"/>).
+    /// null), or the ground pre-warm's arrival or alternate (<see cref="GroundPrewarm.Arrival"/>, <see cref="GroundPrewarm.Alternate"/>).
     /// Every texture goes to the level X-Plane will want with the aircraft there (full detail beside it, the middle levels
     /// further out, a base tile far away), the same choice load-ahead makes once X-Plane sends a position, only made
     /// before X-Plane opens anything. The order is load-ahead's around a point: <see cref="PrefetchPlanner.Select"/>

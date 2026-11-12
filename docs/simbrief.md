@@ -10,12 +10,13 @@ When streaming starts and while you sit at the gate, OrthoStreamXP builds the sc
 
 1. **The departure airport, when streaming starts.** While X-Plane is still loading, OrthoStreamXP builds the photos of the scenery tiles X-Plane loads around your departure airport, each as sharp as X-Plane will want it from the gate. The view at the gate is sharp sooner.
 2. **The arrival and the climb, while the aircraft stands at the gate.** About 30 seconds after the aircraft has come to a stop at the departure airport, OrthoStreamXP starts on the arrival airport, then the climb from the departure to the top of climb. This uses the quiet time before pushback, at the lowest priority: what X-Plane needs now always comes first.
+3. **The alternate airport, if you switch it on.** It is rarely flown, so it is off unless you set `simbrief-alternate = on` (see [Settings in the ini file](#settings-in-the-ini-file)).
 
 When the aircraft rolls for takeoff (faster than 40 kt), whatever has not started yet is dropped and the normal scenery loading takes over. Photos already in the cache are never downloaded again.
 
 The gate and the takeoff roll are told by the aircraft's own ground speed and X-Plane's "on the ground" flag, so moving or lifting the camera in an outside view does not count as a takeoff.
 
-**With mip streaming off** only the departure is built, whole textures within `simbrief-radius-km` of the airport, and only as many as the background build queue takes at once (4 × `dds-build-workers`). These builds do not count against the download limit, are not in the per-phase summary in the log, and are not dropped on the takeoff roll. The arrival and the climb need mip streaming.
+**With mip streaming off** only the departure is built, whole textures within `simbrief-radius-km` of the airport, and only as many as the background build queue takes at once (4 × `dds-build-workers`). These builds do not count against the download limit, are not in the per-phase summary in the log, and are not dropped on the takeoff roll. The arrival, the climb and the alternate need mip streaming.
 
 ## Setting it up
 
@@ -24,7 +25,7 @@ Enter your SimBrief username, or your Pilot ID (the number in your SimBrief acco
 - in the **SimBrief** step of the [first setup](first-setup.md#6-simbrief), or
 - later in **Settings › SimBrief**.
 
-Click **Test SimBrief connection** (in the setup or in Settings) to check that OrthoStreamXP finds your latest flight plan. Both places also have the **download limit per session**.
+Click **Test SimBrief connection** (in the setup or in Settings) to check that OrthoStreamXP finds your latest flight plan. Both places also have the **download limit per session** and **Also build the alternate airport**.
 
 ## Why there is a download limit
 
@@ -37,7 +38,7 @@ When the limit is reached nothing breaks: the rest loads as usual while you fly.
 | Metered or mobile connection | 300 MB |
 | Slow connection | 500 MB |
 | A typical flight at High or Ultra | 1000 MB (default) |
-| Extra quality (about four times the downloads near airports) | 3000 MB |
+| Extra quality (about four times the downloads near airports), or the alternate airport on | 3000 MB |
 
 If the log says *the download budget ... is used up* on your flights, raise the limit a step. **No limit** (`0`) is not recommended.
 
@@ -63,6 +64,7 @@ These are in `orthostreamxp.ini` (see [Settings](settings.md)):
 | Setting | What it does | Default |
 |---|---|---|
 | `simbrief-user` | Your SimBrief username or Pilot ID. Empty: off. | empty |
+| `simbrief-alternate` | `on`: build the alternate airport too, after the arrival. | `off` |
 | `simbrief-download-limit` | The most the SimBrief prefetch may download per streaming session, in MB. `0`: no limit. | `1000` |
 | `simbrief-radius-km` | With mip streaming off: how far around the departure airport textures are built at full detail, 1-50 km. | `10` |
 

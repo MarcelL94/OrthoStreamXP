@@ -4,7 +4,7 @@ using OrthoStreamXP.Setup;
 namespace OrthoStreamXP.Scenery;
 
 /// <summary>
-/// What one phase of the SimBrief prefetch (the departure, the arrival, the climb) cost and brought: the
+/// What one phase of the SimBrief prefetch (the departure, the arrival, the alternate, the climb) cost and brought: the
 /// textures it queued or found built already, the builds it started (tiles, bytes, build time), and how many of the
 /// textures it queued X-Plane loaded later (the hit rate). Logged when streaming stops; the numbers for the PR (R12)
 /// and for the download budget (R4). Thread-safe: builds report from the build threads.

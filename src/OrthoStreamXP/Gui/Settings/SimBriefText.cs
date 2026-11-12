@@ -13,7 +13,11 @@ internal static class SimBriefText
     /// <summary>Why there is a limit at all, and how to choose it.</summary>
     public const string LimitWhy =
         "Why a limit? The free map services can block heavy downloaders, which would hit every user. 1000 MB fits a typical flight; " +
-        "choose less on a metered connection, more with Extra quality.";
+        "choose less on a metered connection, more with Extra quality or the alternate on.";
+
+    /// <summary>What the alternate switch (<c>simbrief-alternate</c>) does.</summary>
+    public const string AlternateHelp =
+        "At the gate, build the alternate airport too, after the arrival. Rarely flown, so off by default.";
 
     /// <summary>The limits offered in the setup; a value set by hand in the file is added to them.</summary>
     public static IReadOnlyList<Choice> LimitChoices(int? current)
@@ -23,7 +27,7 @@ internal static class SimBriefText
             new("300 MB: a metered or mobile connection", "300"),
             new("500 MB: a slow connection", "500"),
             new($"{MountSettings.DefaultSimBriefDownloadLimitMb} MB: a typical flight (recommended)", MountSettings.DefaultSimBriefDownloadLimitMb.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-            new("3000 MB: Extra quality", "3000"),
+            new("3000 MB: Extra quality, or the alternate airport on", "3000"),
             new("No limit (not recommended)", "0"),
         ];
         string? own = current?.ToString(System.Globalization.CultureInfo.InvariantCulture);

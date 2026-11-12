@@ -45,6 +45,7 @@ internal sealed class SetupViewModel : ObservableObject
     private string _cache;
     private string _simBriefUser;
     private Choice _simBriefLimit;
+    private bool _simBriefAlternate;
     /// <summary>The cache folder came from the settings or the person: it no longer follows the packages folder.</summary>
     private bool _cacheChosen;
     private QualityPreset _preset = PresetMemory.Recommended.Preset;
@@ -81,6 +82,7 @@ internal sealed class SetupViewModel : ObservableObject
         SimBriefLimits = SimBriefText.LimitChoices(limit);
         string chosen = (limit ?? MountSettings.DefaultSimBriefDownloadLimitMb).ToString(CultureInfo.InvariantCulture);
         _simBriefLimit = SimBriefLimits.First(c => c.Value == chosen);
+        _simBriefAlternate = existing.GetBool("simbrief-alternate") == true;
         ConnectionTest = new ConnectionTestViewModel(
             () => existing.Get("texture-provider") ?? "bing,esri",
             () => _main.Mount.State == MountState.Stopped,
@@ -300,7 +302,7 @@ internal sealed class SetupViewModel : ObservableObject
         }
     }
 
-    /// <summary>The limit applies only with a username.</summary>
+    /// <summary>The limit and the alternate apply only with a username.</summary>
     public bool HasSimBriefUser => SimBriefUser.Length > 0;
 
     /// <summary>The SimBrief step's download limits; a value set by hand in the file is one of them.</summary>
@@ -316,6 +318,17 @@ internal sealed class SetupViewModel : ObservableObject
         }
     }
 
+    /// <summary>Build the alternate airport too (<c>simbrief-alternate</c>).</summary>
+    public bool SimBriefAlternate
+    {
+        get => _simBriefAlternate;
+        set
+        {
+            if (Set(ref _simBriefAlternate, value)) Raise(nameof(Summary));
+        }
+    }
+
+
     public bool StartNow
     {
         get => _startNow;
@@ -325,7 +338,7 @@ internal sealed class SetupViewModel : ObservableObject
     public string Summary =>
         $"X-Plane: {_xplane}\nScenery packages: {string.Join(", ", SystemCheck.PackagesIn(_packages))} in {_packages}\n" +
         $"Quality: {Preset.Name}\nCache: {CacheFolder}\n" +
-        $"SimBrief: {(SimBriefUser.Length > 0 ? $"on (your flight's scenery is built ahead, {LimitShort})" : "not used")}";
+        $"SimBrief: {(SimBriefUser.Length > 0 ? $"on (your flight's scenery is built ahead, {LimitShort}{(SimBriefAlternate ? ", with the alternate" : "")})" : "not used")}";
 
     private string LimitShort => SimBriefLimit.Value == "0" ? "no download limit" : $"up to {SimBriefLimit.Value} MB per session";
 
@@ -421,6 +434,7 @@ internal sealed class SetupViewModel : ObservableObject
             // Defaults stay out of the file, so a later default applies.
             bool defaultLimit = SimBriefLimit.Value == MountSettings.DefaultSimBriefDownloadLimitMb.ToString(CultureInfo.InvariantCulture);
             settings.Set("simbrief-download-limit", defaultLimit ? null : SimBriefLimit.Value);
+            settings.Set("simbrief-alternate", SimBriefAlternate ? "on" : null);
             Directory.CreateDirectory(CacheFolder);
             settings.Save();
             Log.Info($"Setup saved the settings to {path}");

@@ -1,7 +1,7 @@
 namespace OrthoStreamXP.Scenery;
 
 /// <summary>
-/// The scenery X-Plane loads around a place (a departure, an arrival) or along a route: its 1° DSF tiles,
+/// The scenery X-Plane loads around a place (a departure, an arrival, an alternate) or along a route: its 1° DSF tiles,
 /// and the photo textures they use, read from the package's own DSF files. These are exactly the textures X-Plane will
 /// ask for there, known before it opens anything.
 /// </summary>

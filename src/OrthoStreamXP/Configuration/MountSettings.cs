@@ -80,6 +80,8 @@ internal sealed record MountSettings
     public double SimBriefRadiusKm { get; init; } = DefaultSimBriefRadiusKm;
     /// <summary>The most the SimBrief prefetch may download in a session, in MB; 0: no limit.</summary>
     public int SimBriefDownloadLimitMb { get; init; } = DefaultSimBriefDownloadLimitMb;
+    /// <summary>The ground pre-warm builds the alternate's scenery too (rarely flown: off unless chosen).</summary>
+    public bool SimBriefAlternate { get; init; }
 
     public const int DefaultFileSystemThreads = 64;
     public const double DefaultNearWait = 60, DefaultMaxWait = 6, DefaultLookaheadSeconds = 120;
@@ -165,6 +167,8 @@ internal sealed record MountSettings
         double simBriefRadiusKm = values.Double("simbrief-radius-km", DefaultSimBriefRadiusKm);
         if (simBriefRadiusKm is < 1 or > 50) throw new SettingsException("simbrief-radius-km must be between 1 and 50");
         int simBriefDownloadLimitMb = values.Int("simbrief-download-limit", DefaultSimBriefDownloadLimitMb);
+        string alternateValue = values.String("simbrief-alternate") ?? "off";
+        bool simBriefAlternate = ParseOnOff(alternateValue) ?? throw new SettingsException($"simbrief-alternate must be on or off, not '{alternateValue}'");
         if (simBriefDownloadLimitMb is < 0 or > 100_000) throw new SettingsException("simbrief-download-limit must be between 0 (no limit) and 100000");
 
         if (downloadWorkers < 1) throw new SettingsException("download-workers must be at least 1");
@@ -238,6 +242,7 @@ internal sealed record MountSettings
             SimBriefUser = simBriefUser,
             SimBriefRadiusKm = simBriefRadiusKm,
             SimBriefDownloadLimitMb = simBriefDownloadLimitMb,
+            SimBriefAlternate = simBriefAlternate,
         };
     }
 

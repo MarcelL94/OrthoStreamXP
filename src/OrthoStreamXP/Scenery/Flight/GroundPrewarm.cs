@@ -77,16 +77,17 @@ internal sealed record GroundTarget(string Name, string Source,
 
 /// <summary>
 /// The ground pre-warm: while the aircraft stands at the departure, the scenery of the rest of the flight is built into
-/// the cache, below everything X-Plane and the departure need: first the arrival (where missing photos are noticed
-/// first), as X-Plane will want it from the gate there; then the climb from the departure to
+/// the cache, below everything X-Plane and the departure need: first the arrival and the alternate (where missing
+/// photos are noticed first), each as X-Plane will want it from the gate there; then the climb from the departure to
 /// the top of climb (<see cref="ClimbRoute"/>), each texture as X-Plane will want it when the aircraft passes.
 /// </summary>
 /// <param name="stop">The session's stop: no queuing after it, and a <see cref="Queue"/> in progress ends early.</param>
 /// <param name="run">Runs the queuing off X-Plane's UDP thread (<see cref="Task.Run(Action)"/> when null; tests run it inline).</param>
+/// <param name="alternate">The alternate is built too (<c>simbrief-alternate</c>); off, it is left out with a log line.</param>
 internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<GroundTarget> targets, Func<Action, Task>? run = null,
-    CancellationToken stop = default)
+    bool alternate = true, CancellationToken stop = default)
 {
-    public const int Arrival = 0, Route = 1;
+    public const int Arrival = 0, Alternate = 1, Route = 2;
 
     private readonly Lock _gate = new();
     private Task<FlightPlan?> _plan = plan;
@@ -183,7 +184,7 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
         if (late > 0) Log.Info($"Ground pre-warm: {late} more textures queued during the takeoff roll were dropped");
     }
 
-    /// <summary>Queues the two phases in every package; returns how many textures were queued.</summary>
+    /// <summary>Queues the three phases in every package; returns how many textures were queued.</summary>
     internal int Queue(FlightPlan flight) => Queue(flight, _generation);
 
     private int Queue(FlightPlan flight, int generation)
@@ -199,6 +200,17 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
                     Log.Info($"Ground pre-warm: the arrival {Name(to)} is the departure; its scenery is the departure's ({target.Name})");
                 else
                     queued += Area(target, to, Arrival, "arrival", generation);
+            }
+            if (flight.Alternate is { } other)
+            {
+                if (!alternate)
+                    Log.Info($"Ground pre-warm: the alternate {Name(other)} is left out (simbrief-alternate = off) ({target.Name})");
+                else if (flight.Destination is { } arrival && FlightPlan.SamePlace(other, arrival))
+                    Log.Info($"Ground pre-warm: the alternate {Name(other)} is the arrival; nothing more to build ({target.Name})");
+                else if (FlightPlan.SamePlace(other, flight.Origin))
+                    Log.Info($"Ground pre-warm: the alternate {Name(other)} is the departure; its scenery is the departure's ({target.Name})");
+                else
+                    queued += Area(target, other, Alternate, "alternate", generation);
             }
             queued += Climb(target, flight, generation);
         }

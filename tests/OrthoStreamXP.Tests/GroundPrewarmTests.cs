@@ -6,7 +6,7 @@ namespace OrthoStreamXP.Tests;
 
 /// <summary>
 /// The ground pre-warm: the flight plan's airports and navlog, the climb it covers, when it runs, and what it queues,
-/// including plans without a TOC and with the arrival the same as the departure.
+/// including plans without a TOC, with the alternate the same as the arrival, and with the arrival the same as the departure.
 /// </summary>
 public sealed class GroundPrewarmTests : IDisposable
 {
@@ -297,7 +297,7 @@ public sealed class GroundPrewarmTests : IDisposable
         prewarm.OnCamera(Parked(t0));
         prewarm.OnCamera(Parked(t0.AddSeconds(31)));
         await prewarm.Running; // completes, doesn't throw
-        Assert.Equal(1, calls); // the climb was not queued after the stop
+        Assert.Equal(1, calls); // the alternate and the climb were not queued after the stop
 
         prewarm.OnCamera(Parked(t0.AddSeconds(40), kt: 60));
         Assert.True(prewarm.Running.IsCompletedSuccessfully);
@@ -397,17 +397,38 @@ public sealed class GroundPrewarmTests : IDisposable
         [.. Enumerable.Range(48, 7).SelectMany(lat => Enumerable.Range(5, 8).Select(lon => (lat, lon)))];
 
     [Fact]
-    public void Queues_the_arrival_then_the_climb()
+    public void Queues_the_arrival_then_the_alternate_then_the_climb()
     {
         var (target, calls) = Package(Everywhere);
         int queued = new GroundPrewarm(Task.FromResult<FlightPlan?>(null), [target]).Queue(new FlightPlan(Eddv, Eddf, Eddk, ClimbSouth()));
 
-        Assert.Equal([GroundPrewarm.Arrival, GroundPrewarm.Route], calls.Select(c => c.Phase)); // the alternate EDDK is not built
+        Assert.Equal([GroundPrewarm.Arrival, GroundPrewarm.Alternate, GroundPrewarm.Route], calls.Select(c => c.Phase));
         Assert.Equal(12, calls[0].Textures); // the 3 x 4 tiles round EDDF
-        Assert.True(calls[1].Textures > 12); // the tiles under the climb and either side
+        Assert.Equal(12, calls[1].Textures); // and round EDDK
+        Assert.True(calls[2].Textures > 12); // the tiles under the climb and either side
         Assert.InRange(calls[0].FirstDistanceM, 250_000, 300_000); // EDDV is 270 km from EDDF: placed from the arrival
-        Assert.InRange(calls[1].FirstDistanceM, 0, 1); // the departure lies on the climb
+        Assert.InRange(calls[2].FirstDistanceM, 0, 1); // the departure lies on the climb
         Assert.Equal(calls.Sum(c => c.Textures), queued);
+    }
+
+    [Fact]
+    public void The_alternate_is_left_out_unless_it_is_switched_on()
+    {
+        // The maintainer's PR structure, step 3: the alternate is rarely flown, so it is behind its own switch.
+        var (target, calls) = Package(Everywhere);
+        new GroundPrewarm(Task.FromResult<FlightPlan?>(null), [target], alternate: false).Queue(new FlightPlan(Eddv, Eddf, Eddk, ClimbSouth()));
+
+        Assert.Equal([GroundPrewarm.Arrival, GroundPrewarm.Route], calls.Select(c => c.Phase));
+    }
+
+    [Fact]
+    public void An_alternate_that_is_the_arrival_is_not_built_twice()
+    {
+        // b) SimBrief plans with the destination as the alternate.
+        var (target, calls) = Package(Everywhere);
+        new GroundPrewarm(Task.FromResult<FlightPlan?>(null), [target]).Queue(new FlightPlan(Eddv, Eddf, Eddf with { Icao = "" }, ClimbSouth()));
+
+        Assert.Equal([GroundPrewarm.Arrival, GroundPrewarm.Route], calls.Select(c => c.Phase)); // the same place, even without its code
     }
 
     [Fact]
@@ -423,15 +444,20 @@ public sealed class GroundPrewarmTests : IDisposable
         var (target, calls) = Package(Everywhere);
         new GroundPrewarm(Task.FromResult<FlightPlan?>(null), [target]).Queue(new FlightPlan(Eddv, Eddv, Eddh, circuit));
 
-        Assert.Equal([GroundPrewarm.Route], calls.Select(c => c.Phase)); // no arrival phase: only the climb is left
+        Assert.Equal([GroundPrewarm.Alternate, GroundPrewarm.Route], calls.Select(c => c.Phase)); // no arrival phase; EDDH still is
+
+        // With the alternate the departure too, only the climb is left.
+        var (only, onlyCalls) = Package(Everywhere);
+        new GroundPrewarm(Task.FromResult<FlightPlan?>(null), [only]).Queue(new FlightPlan(Eddv, Eddv, Eddv, circuit));
+        Assert.Equal([GroundPrewarm.Route], onlyCalls.Select(c => c.Phase));
     }
 
     [Fact]
-    public void A_plan_without_a_navlog_still_gets_its_arrival()
+    public void A_plan_without_a_navlog_still_gets_its_arrival_and_alternate()
     {
         var (target, calls) = Package(Everywhere);
         new GroundPrewarm(Task.FromResult<FlightPlan?>(null), [target]).Queue(new FlightPlan(Eddv, Eddf, Eddk, []));
 
-        Assert.Equal([GroundPrewarm.Arrival], calls.Select(c => c.Phase));
+        Assert.Equal([GroundPrewarm.Arrival, GroundPrewarm.Alternate], calls.Select(c => c.Phase));
     }
 }
