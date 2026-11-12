@@ -104,6 +104,9 @@ internal sealed class MountController : ObservableObject
     /// <summary>The running session uses SimBrief (a SimBrief user is set and the switch is on).</summary>
     public bool UsesSimBrief => State == MountState.Running && _session is { UsesSimBrief: true };
 
+    /// <summary>Asks SimBrief for the latest flight plan again (the Home page's button); what came of it, or null without one.</summary>
+    public Task<string>? ReloadFlightPlanAsync() => State == MountState.Running ? _session?.ReloadFlightPlanAsync() : null;
+
     /// <summary>The flight plan the running session fetched as it started (Home's SimBrief line), or null without one.</summary>
     public Task<string>? FirstFlightPlanAsync() => State == MountState.Running ? _session?.FirstFlightPlanAsync() : null;
 
@@ -178,7 +181,7 @@ internal sealed class MountController : ObservableObject
                 session.Dispose();
                 // The streamed textures' RAM copies were large arrays. An ordinary collection frees them but keeps the
                 // memory for reuse (3.9 GB stayed with an idle window); an aggressive one gives it back to Windows.
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+                PrewarmMemory.GiveBack();
             }).ConfigureAwait(true);
             Log.Step("OrthoStreamXP stopped: the photo scenery is no longer shown to X-Plane");
         }

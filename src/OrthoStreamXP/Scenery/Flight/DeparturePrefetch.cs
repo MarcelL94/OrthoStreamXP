@@ -31,9 +31,10 @@ internal sealed class DeparturePrefetch(Func<(double Lat, double Lon)?> aircraft
         if (flight is null) return 0;
         FlightOrigin from = flight.Origin;
         string place = from.Icao.Length > 0 ? from.Icao : $"{from.Lat:F3}, {from.Lon:F3}";
-        if (flight.AgeAt((clock ?? TimeProvider.System).GetUtcNow()) is { } age && age > FlightPlan.MaxAge)
+        DateTimeOffset now = (clock ?? TimeProvider.System).GetUtcNow();
+        if (flight.StaleAt(now))
         {
-            Log.Info($"SimBrief: the latest flight plan ({place}) is {age.TotalHours:0} h old; its departure is not prefetched");
+            Log.Info($"SimBrief: the latest flight plan ({place}) is {flight.AgeAt(now)!.Value.TotalHours:0} h old; its departure is not prefetched");
             return 0;
         }
         if (aircraft() is { } at && Geo.DistanceM(at.Lat, at.Lon, from.Lat, from.Lon) > FlightPlan.NearDepartureKm * 1000)

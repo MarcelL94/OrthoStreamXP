@@ -4,17 +4,20 @@ using OrthoStreamXP.Setup;
 namespace OrthoStreamXP.Scenery;
 
 /// <summary>
-/// What one phase of the SimBrief prefetch (the departure) cost and brought: the
+/// What one phase of the SimBrief prefetch (the departure, the arrival, the climb) cost and brought: the
 /// textures it queued or found built already, the builds it started (tiles, bytes, build time), and how many of the
 /// textures it queued X-Plane loaded later (the hit rate). Logged when streaming stops; the numbers for the PR (R12)
 /// and for the download budget (R4). Thread-safe: builds report from the build threads.
 /// </summary>
-internal sealed class PrefetchMeter(string phase)
+/// <param name="ground">A phase of the ground pre-warm (dropped on the takeoff roll), not the departure.</param>
+internal sealed class PrefetchMeter(string phase, bool ground)
 {
     private readonly ConcurrentDictionary<string, byte> _queued = new(), _loaded = new();
     private long _had, _started, _built, _failed, _tiles, _bytes, _buildTicks;
 
     public string Phase { get; } = phase;
+
+    public bool Ground { get; } = ground;
 
     /// <summary>The session's download budget its builds spend from; null when there is none.</summary>
     public PrefetchBudget? Budget { get; set; }

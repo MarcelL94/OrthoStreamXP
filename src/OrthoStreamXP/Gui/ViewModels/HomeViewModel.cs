@@ -26,7 +26,8 @@ internal sealed class HomeViewModel : ObservableObject, IPage
     private System.Windows.Media.ImageSource? _reportBackdrop;
     private string? _reviewPath;
     private Notice? _tuningNotice;
-    /// <summary>The running session's flight plan, as fetched at the start; null until known.</summary>
+    private bool _reloading;
+    /// <summary>The running session's flight plan, as fetched at the start or by the last reload; null until known.</summary>
     private string? _planStatus;
     private readonly AppUpdates _updates = new();
     /// <summary>Looks for a new version 10 seconds after the window opens, then every 6 hours.</summary>
@@ -40,6 +41,7 @@ internal sealed class HomeViewModel : ObservableObject, IPage
         ChangeQuality = new RelayCommand(() => _main.Show(_main.Settings));
         OpenLog = new RelayCommand(() => _main.Show(_main.LogPage));
         RestartMount = new RelayCommand(() => _ = Mount.RestartAsync(), () => Mount.IsRunning);
+        ReloadFlightPlan = new RelayCommand(() => _ = ReloadFlightPlanAsync(), () => Mount.UsesSimBrief && !_reloading);
         ApplyReview = new RelayCommand(Apply);
         DismissReview = new RelayCommand(() =>
         {
@@ -166,8 +168,18 @@ internal sealed class HomeViewModel : ObservableObject, IPage
     }
 
     /// <summary>
+    /// "Reload SimBrief flight plan": asks SimBrief again whenever the pilot wants (generated the OFP after starting, or
+    /// planned another flight). Never automatic; disabled while a reload runs, so a double click sends one request.
+    /// </summary>
+    public ICommand ReloadFlightPlan { get; }
+
+    /// <summary>Streaming runs with a SimBrief flight plan to reload.</summary>
+    public bool ShowReloadFlightPlan => Mount.UsesSimBrief;
+
+    /// <summary>
     /// Home's SimBrief line, shown whenever the SimBrief switch is on: before the start that the plan is read then,
-    /// while starting that SimBrief is asked, then the flight found ("Flight plan: EDDV → ENGM, generated 12 min ago.").
+    /// while starting that SimBrief is asked, then the flight found ("Flight plan: EDDV → ENGM, generated 12 min ago.")
+    /// or what the last reload found.
     /// </summary>
     public string FlightPlanStatus => Mount.State switch
     {
@@ -189,7 +201,7 @@ internal sealed class HomeViewModel : ObservableObject, IPage
         }
     }
 
-    /// <summary>Streaming started: shows the plan it fetched.</summary>
+    /// <summary>Streaming started: shows the plan it fetched, unless a reload already said more.</summary>
     private async Task ShowFirstFlightPlanAsync()
     {
         if (Mount.FirstFlightPlanAsync() is not { } first)
@@ -198,7 +210,24 @@ internal sealed class HomeViewModel : ObservableObject, IPage
             return;
         }
         string text = await first.ConfigureAwait(true);
-        if (Mount.State == MountState.Running && _planStatus is null) PlanStatus = text;
+        if (Mount.State == MountState.Running && !_reloading && _planStatus is null) PlanStatus = text;
+    }
+
+    private async Task ReloadFlightPlanAsync()
+    {
+        if (Mount.ReloadFlightPlanAsync() is not { } reload) return;
+        _reloading = true;
+        RelayCommand.Refresh();
+        PlanStatus = "Asking SimBrief for your latest flight plan…";
+        try
+        {
+            PlanStatus = await reload.ConfigureAwait(true);
+        }
+        finally
+        {
+            _reloading = false;
+            RelayCommand.Refresh();
+        }
     }
 
     /// <summary>A SimBrief user is set, so there is a departure prefetch to turn off.</summary>
@@ -579,7 +608,7 @@ internal sealed class HomeViewModel : ObservableObject, IPage
         Notices = BuildNotices();
         foreach (string name in new[]
                  {
-                     nameof(ShowFly), nameof(FlyText), nameof(FlyToolTip), nameof(CanChangeDeparturePrefetch),
+                     nameof(ShowFly), nameof(FlyText), nameof(FlyToolTip), nameof(CanChangeDeparturePrefetch), nameof(ShowReloadFlightPlan),
                      nameof(FlightPlanStatus), nameof(ShowFlightPlanStatus),
                      nameof(StartStopText), nameof(StartStopGlyph), nameof(IsBusy), nameof(StatusKind), nameof(StatusGlyph), nameof(StatusTitle),
                      nameof(StatusText), nameof(ShowGettingStarted), nameof(ShowStats), nameof(StatsTitle), nameof(TexturesValue), nameof(ReadyAheadValue),

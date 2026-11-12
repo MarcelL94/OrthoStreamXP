@@ -113,8 +113,17 @@
                         <CheckBox Content="Build my SimBrief flight's scenery ahead" Style="{StaticResource Switch}" IsChecked="{Binding DeparturePrefetch}"
                                   IsEnabled="{Binding CanChangeDeparturePrefetch}" Margin="0,8,0,0" HorizontalAlignment="Right"
                                   Visibility="{Binding ShowDeparturePrefetch, Converter={StaticResource Visible}}"
-                                  ToolTip="For this session: when streaming starts, the photos around your latest SimBrief flight plan's departure are built before X-Plane loads them. Generate your flight plan before you start streaming. The switch can be changed while streaming is stopped and is on again the next time OrthoStreamXP opens; with Start when OrthoStreamXP opens on, streaming starts before you can turn it off."
+                                  ToolTip="For this session: when streaming starts, the photos around your latest SimBrief flight plan's departure are built before X-Plane loads them; while the aircraft stands at the gate, the arrival and the climb follow. Generated your flight plan after starting? Press Reload SimBrief flight plan. The switch can be changed while streaming is stopped and is on again the next time OrthoStreamXP opens; with Start when OrthoStreamXP opens on, streaming starts before you can turn it off."
                                   AutomationProperties.Name="Build my SimBrief flight's scenery ahead, this session" />
+                        <Button Command="{Binding ReloadFlightPlan}" MinHeight="30" Padding="12,3" Margin="0,8,0,0" HorizontalAlignment="Right"
+                                Visibility="{Binding ShowReloadFlightPlan, Converter={StaticResource Visible}}"
+                                ToolTip="Generated your SimBrief flight plan after starting streaming, or planned another flight? Asks SimBrief for your latest flight plan now and builds its scenery. SimBrief is only asked when you press this."
+                                AutomationProperties.Name="Reload SimBrief flight plan">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" Margin="0,0,8,0" />
+                                <TextBlock Text="Reload SimBrief flight plan" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <TextBlock Text="{Binding FlightPlanStatus}" TextWrapping="Wrap" MaxWidth="320" TextAlignment="Right" HorizontalAlignment="Right"
                                    Margin="0,4,0,0" Opacity="0.8" Visibility="{Binding ShowFlightPlanStatus, Converter={StaticResource Visible}}"
                                    AutomationProperties.LiveSetting="Polite" />

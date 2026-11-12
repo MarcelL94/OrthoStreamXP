@@ -134,6 +134,20 @@ public sealed class SimBriefPrefetchTests : IDisposable
     }
 
     [Fact]
+    public async Task A_fetch_that_throws_leaves_no_plan_and_ends_the_session_cleanly()
+    {
+        // The stop awaits WhenDone: a fault there kept the listener and the packages from being disposed.
+        var (session, _, departure, _) = Session(() => throw new InvalidOperationException("a bug"));
+        session.Start();
+        await session.WhenDone(); // does not throw
+        Assert.Null(await session.FirstPlan);
+        Assert.Empty(departure);
+        Assert.StartsWith("No flight plan: the flight plan could not be read", await session.DescribeFirstAsync(), StringComparison.Ordinal);
+        Assert.StartsWith("No flight plan", await session.ReloadAsync(), StringComparison.Ordinal);
+        await session.WhenDone();
+    }
+
+    [Fact]
     public void A_number_is_the_pilot_id_anything_else_the_username()
     {
         Assert.Equal("https://www.simbrief.com/api/xml.fetcher.php?userid=123456&json=1", SimBriefClient.UrlFor(" 123456 ").AbsoluteUri);
@@ -292,7 +306,7 @@ public sealed class SimBriefPrefetchTests : IDisposable
     public async Task Home_is_told_the_flight_plan_found_at_the_start_or_why_there_is_none()
     {
         SimBriefSession Session(SimBriefAnswer answer) => new(_ => Task.FromResult(answer),
-            [new DepartureTarget("pkg", Package(AtAirport, Around), _ => false, textures => textures.Count)], () => null, radiusKm: 10, Clock);
+            [new DepartureTarget("pkg", Package(AtAirport, Around), _ => false, textures => textures.Count)], [], () => null, radiusKm: 10, Clock);
 
         Assert.StartsWith("Flight plan: EDDM → EGLL", await Session(Answer(Eddm, Egll, "4")).DescribeFirstAsync(), StringComparison.Ordinal);
         Assert.Equal("No flight plan: no flight plan yet.", await Session(SimBriefAnswer.Failed("no flight plan yet")).DescribeFirstAsync());
@@ -308,7 +322,7 @@ public sealed class SimBriefPrefetchTests : IDisposable
             {
                 lock (departure) departure.AddRange(textures);
                 return textures.Count;
-            })], () => null, radiusKm: 10, Clock);
+            })], [], () => null, radiusKm: 10, Clock);
 
         session.Start();
         await session.WhenDone();
@@ -317,23 +331,138 @@ public sealed class SimBriefPrefetchTests : IDisposable
         Assert.Equal("5", session.Current!.Id);
     }
 
-    [Fact]
-    public async Task A_fetch_that_throws_leaves_no_plan_and_ends_the_session_cleanly()
-    {
-        // The stop awaits WhenDone: a fault there kept the listener and the packages from being disposed.
-        var departure = new List<VirtualPath>();
-        var session = new SimBriefSession(_ => throw new InvalidOperationException("a bug"),
-            [new DepartureTarget("pkg", Package(AtAirport, Around), _ => false, textures =>
-            {
-                lock (departure) departure.AddRange(textures);
-                return textures.Count;
-            })], () => null, radiusKm: 10, Clock);
+    // ---------------------------------------------------------------- reloading the plan (M1, R9)
 
+    /// <summary>A session over the EDDM package, its fetch answering <paramref name="answers"/> in turn (the last again after).</summary>
+    private (SimBriefSession Session, Func<int> Fetches, List<VirtualPath> Departure, Func<(int Cancel, int CancelDeparture, int Starts)> Counts)
+        Session(params Func<Task<SimBriefAnswer>>[] answers)
+    {
+        int fetches = 0, cancels = 0, cancelDepartures = 0, starts = 0;
+        var departure = new List<VirtualPath>();
+        string package = Package(AtAirport, Around);
+        var target = new DepartureTarget("pkg", package, _ => false, textures =>
+        {
+            lock (departure) departure.AddRange(textures);
+            return textures.Count;
+        });
+        var ground = new GroundTarget("pkg", package, (_, _, _, _) => (0, 0), (_, _, _) => (0, 0), () => ++cancels, () => ++cancelDepartures);
+        var session = new SimBriefSession(_ => answers[Math.Min(Interlocked.Increment(ref fetches), answers.Length) - 1](), [target], [ground],
+            () => null, radiusKm: 10, Clock, run: _ =>
+            {
+                starts++;
+                return Task.CompletedTask;
+            });
+        return (session, () => Volatile.Read(ref fetches), departure, () => (cancels, cancelDepartures, starts));
+    }
+
+    private static CameraReport ParkedAt(FlightOrigin airport, double seconds) =>
+        new(airport.Lat, airport.Lon, 3, null, null, false, new DateTime(2026, 11, 11, 12, 0, 0, DateTimeKind.Utc).AddSeconds(seconds));
+
+    [Fact]
+    public async Task A_reloaded_plan_from_elsewhere_drops_the_old_one_prefetches_its_departure_and_watches_its_gate()
+    {
+        var (session, fetches, departure, counts) = Session(() => Task.FromResult(Answer(Egll, Eddm, "1")), () => Task.FromResult(Answer(Eddm, Egll, "2")));
         session.Start();
-        await session.WhenDone(); // does not throw
-        Assert.Null(await session.FirstPlan);
+        await session.WhenDone();
+        Assert.Empty(departure); // EGLL: this package has nothing there
+        session.OnCamera(ParkedAt(Egll, 0));
+        session.OnCamera(ParkedAt(Egll, 31));
+        Assert.Equal((0, 0, 1), counts()); // the old plan's pre-warm ran
+
+        string said = await session.ReloadAsync();
+
+        Assert.StartsWith("Loaded EDDM → EGLL", said, StringComparison.Ordinal);
+        Assert.Equal((1, 1), (counts().Cancel, counts().CancelDeparture)); // the old plan's requests went
+        Assert.Equal([AtAirport.Stem, Around.Stem], Stems(departure)); // the new departure is built
+        Assert.Equal("2", session.Current!.Id);
+        session.OnCamera(ParkedAt(Eddm, 100));
+        session.OnCamera(ParkedAt(Eddm, 131));
+        Assert.Equal(2, counts().Starts); // watched from the start for the new gate
+        Assert.Equal(2, fetches());
+    }
+
+    [Fact]
+    public async Task Reloading_the_same_plan_changes_nothing()
+    {
+        var (session, fetches, departure, counts) = Session(() => Task.FromResult(Answer(Eddm, Egll, "7")));
+        session.Start();
+        await session.WhenDone();
+        departure.Clear();
+
+        string said = await session.ReloadAsync();
+
+        Assert.StartsWith("Unchanged: EDDM → EGLL", said, StringComparison.Ordinal);
+        Assert.Equal((0, 0, 0), counts());
         Assert.Empty(departure);
-        Assert.StartsWith("No flight plan: the flight plan could not be read", await session.DescribeFirstAsync(), StringComparison.Ordinal);
+        Assert.Equal(2, fetches());
+    }
+
+    [Fact]
+    public async Task A_fresh_plan_from_the_same_airport_as_a_stale_one_gets_its_departure_built()
+    {
+        // Mounted with yesterday's OFP (departure skipped as too old), then a new one generated at the same airport.
+        SimBriefAnswer Dated(string id, TimeSpan age) => new(new FlightPlan(Eddm, Egll, null, [], Now - age, id), null);
+        var (session, _, departure, _) = Session(() => Task.FromResult(Dated("1", TimeSpan.FromHours(29))),
+            () => Task.FromResult(Dated("2", TimeSpan.FromMinutes(1))));
+        session.Start();
+        await session.WhenDone();
+        Assert.Empty(departure); // the stale plan's departure is not prefetched
+
+        string said = await session.ReloadAsync();
+
+        Assert.EndsWith("Its departure is being built.", said, StringComparison.Ordinal);
+        Assert.Equal([AtAirport.Stem, Around.Stem], Stems(departure));
+    }
+
+    [Fact]
+    public async Task A_new_plan_from_a_reload_starts_the_download_limit_again_and_the_same_plan_does_not()
+    {
+        // A turnaround: the first flight spent the whole limit, then the pilot plans the way back and reloads.
+        var budget = new PrefetchBudget(100);
+        SimBriefAnswer[] answers = [Answer(Eddm, Egll, "1"), Answer(Eddm, Egll, "1"), Answer(Egll, Eddm, "2")];
+        int fetches = 0;
+        var session = new SimBriefSession(_ => Task.FromResult(answers[Math.Min(fetches++, answers.Length - 1)]), [], [], () => null,
+            radiusKm: 10, Clock, budget: budget);
+        await session.FirstPlan;
+        budget.Spend(100);
+
+        await session.ReloadAsync(); // unchanged: still spent
+        Assert.True(budget.Exhausted);
+
+        Assert.StartsWith("Loaded EGLL → EDDM", await session.ReloadAsync(), StringComparison.Ordinal);
+        Assert.Equal(0, budget.SpentBytes);
+        Assert.Equal(1, budget.Round);
+    }
+
+    [Fact]
+    public async Task Two_presses_during_one_reload_send_one_request()
+    {
+        var held = new TaskCompletionSource<SimBriefAnswer>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var (session, fetches, _, _) = Session(() => Task.FromResult(Answer(Eddm, Egll, "1")), () => held.Task);
+        session.Start();
+        await session.FirstPlan;
+
+        Task<string> first = session.ReloadAsync(), second = session.ReloadAsync();
+        Assert.Same(first, second);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+        held.SetResult(Answer(Eddm, Egll, "1"));
+        await first;
+
+        Assert.Equal(2, fetches()); // the start's and one reload
+    }
+
+    [Fact]
+    public async Task A_plan_generated_after_streaming_started_is_found_by_the_reload()
+    {
+        // The common case: OrthoStreamXP started first, the OFP generated afterwards.
+        var (session, _, departure, _) = Session(() => Task.FromResult(SimBriefAnswer.Failed("no flight plan yet")),
+            () => Task.FromResult(Answer(Eddm, Egll, "3")));
+        session.Start();
+        await session.WhenDone();
+        Assert.Empty(departure);
+
+        Assert.StartsWith("Loaded EDDM → EGLL", await session.ReloadAsync(), StringComparison.Ordinal);
+        Assert.NotEmpty(departure);
     }
 
     [Theory]

@@ -622,23 +622,56 @@ public sealed class StreamingTests : IDisposable
     }
 
     [Fact]
+    public async Task The_end_of_the_ground_prewarm_is_told_once_it_is_all_built_but_not_after_a_takeoff_cancel()
+    {
+        // F3: the build buffers are given back while the aircraft still stands at the gate.
+        Setup s = Streaming();
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+        int done = 0;
+        warmer.GroundDone += () => done++;
+        (double, double) Far(double lat, double lon) => (500_000, 0); // a base tile only
+        StreamedTexture arrival = s.Streamer.Get(Texture("21904_36144_BI16"))!;
+
+        warmer.CheckGroundDone();
+        Assert.Equal(0, done); // nothing queued yet
+
+        Assert.Equal((1, 0), warmer.PrefetchGround([Texture("21904_36144_BI16")], Far, GroundPrewarm.Arrival));
+        await Until(() =>
+        {
+            warmer.StartWhatFits();
+            warmer.CheckGroundDone();
+            return done > 0;
+        });
+        Assert.True(s.Streamer.RealFrom(arrival) <= arrival.BaseMip);
+        warmer.CheckGroundDone();
+        Assert.Equal(1, done); // once
+
+        // Dropped on the takeoff roll: the aircraft moves, no compaction then.
+        warmer.PrefetchGround([Texture("21824_35824_BI16")], Far, GroundPrewarm.Route);
+        Assert.Equal(1, warmer.CancelGround());
+        warmer.CheckGroundDone();
+        Assert.Equal(1, done);
+    }
+
+    [Fact]
     public async Task Each_prefetch_phase_counts_its_builds_downloads_and_what_XPlane_loaded_later()
     {
         // R12: the numbers for the PR, per phase.
         Setup s = Streaming();
         var catalog = new TextureCatalog();
         using var warmer = new MipWarmer(catalog, s.Streamer, s.View, heavy: 2);
-        const string gateStem = "21904_36144_BI16";
-        StreamedTexture gate = s.Streamer.Get(Texture(gateStem))!;
+        const string arrivalStem = "21904_36144_BI16";
+        StreamedTexture arrival = s.Streamer.Get(Texture(arrivalStem))!;
+        (double, double) Beside(double lat, double lon) => (0, 0);
         Assert.All(warmer.Phases, p => Assert.Null(p.Summary())); // nothing done: nothing logged
 
-        warmer.PrefetchAround([Texture(gateStem)], gate.Lat, gate.Lon);
+        warmer.PrefetchGround([Texture(arrivalStem)], Beside, GroundPrewarm.Arrival);
         await Until(() =>
         {
             warmer.StartWhatFits();
-            return s.Streamer.RealFrom(gate) == 0 && warmer.WaitingFor(Texture(gateStem)) is null;
+            return s.Streamer.RealFrom(arrival) == 0 && warmer.WaitingFor(Texture(arrivalStem)) is null;
         });
-        PrefetchMeter meter = warmer.Phases.Single(p => p.Phase == "departure");
+        PrefetchMeter meter = warmer.Phases.Single(p => p.Phase == "arrival");
         await Until(() => meter.Built == 2); // its base tile, then full detail
         Assert.Equal((1, 2L, 0L), (meter.Queued, meter.Started, meter.Failed));
         Assert.Equal(17, meter.Tiles); // 1 base tile + 16 at zoom 14
@@ -646,13 +679,15 @@ public sealed class StreamingTests : IDisposable
         Assert.True(meter.BuildTime > TimeSpan.Zero);
         Assert.Equal(0, meter.Loaded);
 
-        catalog.AddTerrain(VirtualPath.Of("terrain", gateStem + ".ter")); // X-Plane loads it at the gate
+        catalog.AddTerrain(VirtualPath.Of("terrain", arrivalStem + ".ter")); // X-Plane loads it on the approach
         Assert.Equal(1, meter.Loaded);
         Assert.Contains("X-Plane loaded 1 of the 1 queued (100 %)", meter.Summary(), StringComparison.Ordinal);
 
-        // Asked again, built already: counted as had, not queued again.
-        warmer.PrefetchAround([Texture(gateStem)], gate.Lat, gate.Lon);
-        Assert.Equal((1, 1L), (meter.Queued, meter.Had));
+        // The departure, built already: counted as had, not queued; the other phases stay silent.
+        warmer.PrefetchAround([Texture(arrivalStem)], arrival.Lat, arrival.Lon);
+        PrefetchMeter departure = warmer.Phases.Single(p => p.Phase == "departure");
+        Assert.Equal((0, 1L), (departure.Queued, departure.Had));
+        Assert.Null(warmer.Phases.Single(p => p.Phase == "climb").Summary());
     }
 
     [Fact]
@@ -664,11 +699,11 @@ public sealed class StreamingTests : IDisposable
         using var warmer = new MipWarmer(catalog, s.Streamer, s.View, heavy: 2);
         var budget = new PrefetchBudget(1);
         warmer.UseBudget(budget);
+        (double, double) Far(double lat, double lon) => (500_000, 0); // base tiles only: one build each
         VirtualPath first = Texture("21904_36144_BI16"), second = Texture("21824_35824_BI16");
         StreamedTexture firstTexture = s.Streamer.Get(first)!;
-        (double Lat, double Lon) far = (firstTexture.Lat + 4.5, firstTexture.Lon); // 500 km: base tiles only, one build each
 
-        warmer.PrefetchAround([first], far.Lat, far.Lon);
+        warmer.PrefetchGround([first], Far, GroundPrewarm.Arrival);
         await Until(() =>
         {
             warmer.StartWhatFits();
@@ -677,7 +712,7 @@ public sealed class StreamingTests : IDisposable
         Assert.True(s.Streamer.RealFrom(firstTexture) <= firstTexture.BaseMip);
 
         warmer.StartWhatFits(); // drops what is left, logs once
-        Assert.Equal((0, 0), warmer.PrefetchAround([second], far.Lat, far.Lon));
+        Assert.Equal((0, 0), warmer.PrefetchGround([second], Far, GroundPrewarm.Route));
         Assert.Null(warmer.WaitingFor(second));
 
         catalog.AddTerrain(VirtualPath.Of("terrain", "21824_35824_BI16.ter")); // X-Plane loads it: load-ahead still fetches it
@@ -691,6 +726,10 @@ public sealed class StreamingTests : IDisposable
         });
         await Task.Delay(100, TestContext.Current.CancellationToken);
         Assert.Equal(spent, budget.SpentBytes); // load-ahead never counts
+
+        budget.Restart(); // a reloaded new flight plan (a turnaround): the prefetch may queue again
+        Assert.False(budget.Exhausted);
+        Assert.NotEqual((0, 0), warmer.PrefetchGround([second], Far, GroundPrewarm.Arrival));
     }
 
     [Fact]
@@ -710,7 +749,7 @@ public sealed class StreamingTests : IDisposable
         var budget = new PrefetchBudget(1_000_000);
         warmer.UseBudget(budget);
 
-        Assert.Equal((0, 1), warmer.PrefetchAround([Texture()], t.Lat + 2, t.Lon)); // 220 km: its base tile only
+        Assert.Equal((0, 1), warmer.PrefetchGround([Texture()], (_, _) => (500_000, 0), GroundPrewarm.Arrival)); // far: its base tile only
         warmer.StartWhatFits();
         await Task.Delay(100, TestContext.Current.CancellationToken);
 
@@ -719,10 +758,79 @@ public sealed class StreamingTests : IDisposable
     }
 
     [Fact]
+    public void The_takeoff_roll_drops_only_the_departures_requests_still_waiting()
+    {
+        Setup s = Streaming();
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+        StreamedTexture here = s.Streamer.Get(Texture())!;
+        VirtualPath flightPath = Texture("21904_35856_BI16"), arrival = Texture("21904_36144_BI16");
+        (double, double) Beside(double lat, double lon) => (0, 0);
+
+        warmer.PrefetchAround([Texture()], here.Lat, here.Lon);
+        warmer.Prefetch([flightPath]);
+        warmer.PrefetchGround([arrival], Beside, GroundPrewarm.Arrival);
+
+        Assert.Equal(1, warmer.CancelDeparture());
+        Assert.Null(warmer.WaitingFor(Texture()));
+        Assert.NotNull(warmer.WaitingFor(flightPath)); // the flight-path prefetch is not the departure's
+        Assert.Equal(1, warmer.GroundWaiting);
+        Assert.Equal(0, warmer.CancelDeparture());
+    }
+
+    [Fact]
+    public void The_ground_prewarm_ranks_after_the_departure_and_is_dropped_for_the_takeoff()
+    {
+        Setup s = Streaming();
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+        StreamedTexture here = s.Streamer.Get(Texture())!;
+        VirtualPath arrival = Texture("21904_36144_BI16"), route = Texture("21824_35824_BI16");
+        (double, double) Beside(double lat, double lon) => (0, 0);
+
+        warmer.PrefetchAround([Texture()], here.Lat, here.Lon); // the departure
+        Assert.Equal((1, 0), warmer.PrefetchGround([arrival], Beside, GroundPrewarm.Arrival));
+        Assert.Equal((1, 0), warmer.PrefetchGround([route], Beside, GroundPrewarm.Route));
+        Assert.Equal((0, 0), warmer.PrefetchGround([Texture()], Beside, GroundPrewarm.Route)); // the departure's request stays
+        Assert.Equal(2, warmer.GroundWaiting);
+
+        // Full detail asked for, nothing there yet: the base tile first, still below the departure and in phase order.
+        int departure = warmer.WaitingFor(Texture())!.Value.Priority;
+        int first = warmer.Target(arrival, 0, MipWarmer.GroundPriority(GroundPrewarm.Arrival))!.Value.Priority;
+        int last = warmer.Target(route, 0, MipWarmer.GroundPriority(GroundPrewarm.Route))!.Value.Priority;
+        Assert.True(departure < FetchPriority.Background && FetchPriority.Background < first && first < last, $"{departure} < {first} < {last}");
+
+        Assert.Equal(2, warmer.CancelGround());
+        Assert.Equal(0, warmer.GroundWaiting);
+        Assert.Equal(0, warmer.CancelGround());
+    }
+
+    [Fact]
+    public void A_texture_XPlane_loads_while_the_ground_prewarm_waits_for_it_gets_load_aheads_request()
+    {
+        Setup s = Streaming();
+        var catalog = new TextureCatalog();
+        using var warmer = new MipWarmer(catalog, s.Streamer, s.View, heavy: 2);
+        StreamedTexture here = s.Streamer.Get(Texture())!;
+        (double, double) Beside(double lat, double lon) => (0, 0);
+        s.View.Update(new CameraReport(here.Lat, here.Lon, 2, null, null, false, DateTime.UtcNow)); // parked beside it
+
+        Assert.Equal((1, 0), warmer.PrefetchGround([Texture()], Beside, GroundPrewarm.Route));
+        Assert.True(warmer.WaitingFor(Texture())!.Value.Ground);
+
+        catalog.AddTerrain(VirtualPath.Of("terrain", Stem + ".ter")); // X-Plane loads it
+        var request = warmer.WaitingFor(Texture())!.Value;
+        Assert.False(request.Ground);
+        Assert.Equal((0, FetchPriority.NearWarm), (request.Mip, request.Priority)); // full detail beside the camera, near priority
+        Assert.Equal((0, 0), warmer.PrefetchGround([Texture()], Beside, GroundPrewarm.Route)); // and the ground pre-warm doesn't take it back
+
+        Assert.Equal(0, warmer.CancelGround()); // the takeoff roll keeps it
+        Assert.NotNull(warmer.WaitingFor(Texture()));
+    }
+
+    [Fact]
     public void A_texture_XPlane_loads_while_the_departure_waits_for_it_gets_load_aheads_request()
     {
-        // Maintainer, #30 item 2 (H1 for the departure): the departure's level is a guess made at the gate; once X-Plane
-        // loads the texture, load-ahead's request takes over.
+        // Maintainer, #30 item 2 (H1 for the departure): the takeoff roll drops the departure's requests; a load-ahead
+        // request that the departure's had kept out would go with it.
         Setup s = Streaming();
         var catalog = new TextureCatalog();
         using var warmer = new MipWarmer(catalog, s.Streamer, s.View, heavy: 2);
@@ -730,15 +838,17 @@ public sealed class StreamingTests : IDisposable
         s.View.Update(new CameraReport(here.Lat, here.Lon, 2, null, null, false, DateTime.UtcNow));
 
         Assert.Equal((1, 0), warmer.PrefetchAround([Texture()], here.Lat, here.Lon));
-        Assert.Equal(FetchPriority.Warm, warmer.WaitingFor(Texture())!.Value.Priority);
         catalog.AddTerrain(VirtualPath.Of("terrain", Stem + ".ter")); // X-Plane loads it
         Assert.Equal(FetchPriority.NearWarm, warmer.WaitingFor(Texture())!.Value.Priority);
+
+        Assert.Equal(0, warmer.CancelDeparture()); // the takeoff roll keeps it
+        Assert.NotNull(warmer.WaitingFor(Texture()));
     }
 
     [Fact]
     public void A_departure_queued_again_leaves_load_aheads_waiting_request_alone()
     {
-        // H1 the other way round: a departure queued over textures X-Plane has loaded does not overwrite their request.
+        // H1 the other way round: "Reload" while X-Plane runs queues a departure over textures X-Plane has loaded.
         Setup s = Streaming();
         var catalog = new TextureCatalog();
         using var warmer = new MipWarmer(catalog, s.Streamer, s.View, heavy: 2);
@@ -748,25 +858,97 @@ public sealed class StreamingTests : IDisposable
         VirtualPath other = Texture("21904_35856_BI16");
 
         Assert.Equal((1, 0), warmer.PrefetchAround([Texture(), other], here.Lat, here.Lon)); // only the one X-Plane has not loaded
+        Assert.Equal(1, warmer.CancelDeparture());
         Assert.Equal(FetchPriority.NearWarm, warmer.WaitingFor(Texture())!.Value.Priority);
-        Assert.Equal((1, 0), warmer.PrefetchAround([other], here.Lat, here.Lon)); // a departure request replaces a departure request
+
+        // A departure request replaces a departure request (the newer plan), and outranks a waiting ground one.
+        Assert.Equal((1, 0), warmer.PrefetchGround([other], (_, _) => (0, 0), GroundPrewarm.Arrival));
+        Assert.Equal((1, 0), warmer.PrefetchAround([other], here.Lat, here.Lon));
+        Assert.Equal((1, 0), warmer.PrefetchAround([other], here.Lat, here.Lon));
+        Assert.Equal(0, warmer.GroundWaiting);
+        Assert.Equal(1, warmer.CancelDeparture());
     }
 
     [Fact]
-    public void Around_the_departure_the_order_is_load_aheads_nearest_first()
+    public void Around_an_airport_the_order_is_load_aheads_nearest_first()
     {
-        // R6: PrefetchPlanner.Select without motion orders the departure.
+        // R6: PrefetchPlanner.Select without motion orders the departure and the arrival.
         Setup s = Streaming();
         using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
         StreamedTexture near = s.Streamer.Get(Texture())!;
         VirtualPath middle = Texture("21904_35856_BI16"), far = Texture("21904_36144_BI16");
 
-        warmer.PrefetchAround([far, middle, Texture()], near.Lat, near.Lon);
+        warmer.PrefetchAround([far, middle, Texture()], near.Lat, near.Lon, GroundPrewarm.Arrival);
 
         double[] order = [.. new[] { Texture(), middle, far }.Select(t => warmer.WaitingFor(t)!.Value.Order)];
         Assert.Equal(order.Order(), order); // nearest first, in metres like load-ahead's own requests
         Assert.InRange(order[0], 0, 1);
         Assert.True(order[2] > 20_000);
+        Assert.All(new[] { Texture(), middle, far }, t => Assert.True(warmer.WaitingFor(t)!.Value.Ground));
+    }
+
+    [Fact]
+    public async Task The_build_memory_is_given_back_only_once_XPlane_is_quiet()
+    {
+        // R1: the compacting collection pauses every thread, X-Plane's reads too: it waits for a quiet moment.
+        Setup s = Streaming();
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+        using var stop = new CancellationTokenSource();
+        int givenBack = 0;
+        var timing = new PrewarmMemory.Timing(TimeSpan.FromMilliseconds(300), TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(10));
+        var memory = new PrewarmMemory([warmer], stop.Token, timing, () => Interlocked.Increment(ref givenBack));
+        StreamedTexture t = s.Streamer.Get(Texture())!;
+
+        memory.OnGroundDone();
+        var reading = System.Diagnostics.Stopwatch.StartNew();
+        while (reading.ElapsedMilliseconds < 600)
+        {
+            ReadLevel(s.Streamer, t, t.BaseMip); // X-Plane reads: not quiet
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+            Assert.Equal(0, Volatile.Read(ref givenBack));
+        }
+        await memory.Waiting.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal(1, givenBack);
+
+        memory.OnGroundDone(); // once a session
+        await memory.Waiting.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal(1, givenBack);
+    }
+
+    [Fact]
+    public async Task New_prewarm_work_cancels_a_give_back_waiting_for_quiet()
+    {
+        Setup s = Streaming();
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+        using var stop = new CancellationTokenSource();
+        int givenBack = 0;
+        var timing = new PrewarmMemory.Timing(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60), TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(10));
+        var memory = new PrewarmMemory([warmer], stop.Token, timing, () => givenBack++);
+
+        memory.OnGroundDone();
+        warmer.PrefetchGround([Texture("21904_36144_BI16")], (_, _) => (500_000, 0), GroundPrewarm.Arrival); // a reloaded plan's pre-warm
+        await memory.Waiting.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal(0, givenBack);
+    }
+
+    [Fact]
+    public void A_move_of_the_camera_outranks_a_waiting_ground_request_for_a_loaded_texture()
+    {
+        Setup s = Streaming();
+        var catalog = new TextureCatalog();
+        catalog.AddTerrain(VirtualPath.Of("terrain", Stem + ".ter")); // loaded before the warmer listens: only a move queues it
+        using var warmer = new MipWarmer(catalog, s.Streamer, s.View, heavy: 2);
+        StreamedTexture here = s.Streamer.Get(Texture())!;
+        (double, double) Beside(double lat, double lon) => (0, 0);
+        Assert.Equal((1, 0), warmer.PrefetchGround([Texture()], Beside, GroundPrewarm.Route));
+        Assert.True(warmer.WaitingFor(Texture())!.Value.Ground);
+
+        s.View.Update(new CameraReport(here.Lat, here.Lon, 2, null, null, false, DateTime.UtcNow)); // the first position: OnMoved
+        var request = warmer.WaitingFor(Texture())!.Value;
+        Assert.False(request.Ground);
+        Assert.Equal(FetchPriority.NearWarm, request.Priority);
+        Assert.Equal(0, warmer.CancelGround());
+        Assert.NotNull(warmer.WaitingFor(Texture()));
     }
 
     [Fact]

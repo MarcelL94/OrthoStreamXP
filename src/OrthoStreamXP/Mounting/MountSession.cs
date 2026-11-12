@@ -34,7 +34,7 @@ internal sealed class MountSession : IDisposable
     private NightPainting? _nightPainting;
     private Task? _summaryLoop, _sampleLoop;
     private HttpClient? _simBrief;
-    /// <summary>The SimBrief side (plan, departure prefetch).</summary>
+    /// <summary>The SimBrief side (plan, departure prefetch, ground pre-warm, reload); told every position X-Plane sends.</summary>
     private volatile SimBriefSession? _simBriefSession;
     private bool _stopped;
 
@@ -176,6 +176,7 @@ internal sealed class MountSession : IDisposable
                 {
                     _view.Update(camera);
                     readLog?.Camera(camera);
+                    _simBriefSession?.OnCamera(camera);
                 },
                 streaming ? model.UseScreen : null,
                 seasons is null ? null : day => seasons.OfferDate(day, _view.Starting), _daylight);
@@ -212,7 +213,7 @@ internal sealed class MountSession : IDisposable
             .Select(m => (Mount: m, Prefetch: m.Warmer is { } warmer ? warmer.Prefetch : m.Scheduler is { } scheduler ? scheduler.Prefetch : (Func<IReadOnlyList<VirtualPath>, int>?)null))
             .Where(m => m.Prefetch is not null)
             .Select(m => new DepartureTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, path => m.Mount.Roots.CachedFile(path) is not null, m.Prefetch!,
-                m.Mount.Warmer is { } warmer ? warmer.PrefetchAround : null))];
+                m.Mount.Warmer is { } warmer ? (textures, lat, lon) => warmer.PrefetchAround(textures, lat, lon) : null))];
         if (targets.Length == 0)
         {
             Log.Info("SimBrief: departure prefetch needs an imagery provider and load-ahead (or aircraft tracking); it is off for this run");
@@ -220,24 +221,34 @@ internal sealed class MountSession : IDisposable
         }
         if (_mounts.All(m => m.Warmer is null))
             Log.Info("SimBrief: mip streaming is off, so only the departure is built (whole textures, as many as the background queue takes); " +
-                     "not counted against the download limit");
+                     "not counted against the download limit and not dropped on the takeoff roll");
         _simBrief = new HttpClient();
         var client = new SimBriefClient(_simBrief);
         AircraftPositionListener? listener = _listener;
+        PrefetchBudget? budget = null;
         if (_settings.SimBriefDownloadLimitMb > 0)
         {
-            var budget = new PrefetchBudget(_settings.SimBriefDownloadLimitMb * 1024L * 1024);
+            budget = new PrefetchBudget(_settings.SimBriefDownloadLimitMb * 1024L * 1024);
             foreach (PackageMount mount in _mounts) mount.Warmer?.UseBudget(budget);
         }
-        var simBrief = new SimBriefSession(ct => client.FetchAsync(user, ct), targets,
+        // The ground pre-warm needs X-Plane's positions.
+        GroundTarget[] ground = listener is null ? [] : [.. _mounts.Where(m => m.Warmer is not null)
+            .Select(m => (Mount: m, Warmer: m.Warmer!))
+            .Select(m => new GroundTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, m.Warmer.PrefetchAround, m.Warmer.PrefetchGround, m.Warmer.CancelGround,
+                m.Warmer.CancelDeparture, m.Warmer.RunningSummary))];
+        if (ground.Length > 0) PrewarmMemory.Watch([.. _mounts.Select(m => m.Warmer).OfType<MipWarmer>()], _summaries.Token);
+        var simBrief = new SimBriefSession(ct => client.FetchAsync(user, ct), targets, ground,
             () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, _settings.SimBriefRadiusKm,
-            stop: _summaries.Token);
+            stop: _summaries.Token, budget: budget);
         _simBriefSession = simBrief;
         simBrief.Start();
     }
 
     /// <summary>Whether this session uses SimBrief (a SimBrief user is set and the prefetch is on).</summary>
     public bool UsesSimBrief => _simBriefSession is not null;
+
+    /// <summary>The Home page's "Reload SimBrief flight plan": what came of it, in the window's words; null without SimBrief.</summary>
+    public Task<string>? ReloadFlightPlanAsync() => _stopped ? null : _simBriefSession?.ReloadAsync();
 
     /// <summary>The flight plan fetched as streaming started, in the window's words; null without SimBrief.</summary>
     public Task<string>? FirstFlightPlanAsync() => _stopped ? null : _simBriefSession?.DescribeFirstAsync();
@@ -315,8 +326,8 @@ internal sealed class MountSession : IDisposable
             else
                 await finished.ConfigureAwait(false);
         }
-        // SimBrief's departure prefetch queues into the packages' load-ahead: it ends before the packages are disposed.
-        // A failure there is a bug, but only logged: the listener and the packages must still go.
+        // SimBrief's departure prefetch, reload and ground pre-warm queue into the packages' load-ahead: they end before
+        // the packages are disposed. A failure there is a bug, but only logged: the listener and the packages must still go.
         foreach (Task? loop in new[] { _summaryLoop, _sampleLoop })
             await EndAsync(loop, "").ConfigureAwait(false);
         await EndAsync(_simBriefSession?.WhenDone(), "SimBrief prefetch").ConfigureAwait(false);

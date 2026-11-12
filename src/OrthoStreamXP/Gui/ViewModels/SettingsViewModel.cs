@@ -65,7 +65,7 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
                 FieldKind.Text, placeholder: "--allow_reshade"),
         ];
         SimBriefUser = Field("simbrief-user", "SimBrief username",
-            "Your SimBrief username or Pilot ID (the number in your SimBrief account settings). When streaming starts, the photos around the departure airport of your latest SimBrief flight plan are built before X-Plane loads them. Photos already in the cache are skipped. Leave it empty to turn this off.",
+            "Your username or Pilot ID. Your latest flight plan's departure, arrival and climb are built ahead. Empty: off.",
             FieldKind.Text, placeholder: "username or Pilot ID");
         SimBriefTest = new SimBriefTestViewModel(_main.MeshHttp, () => SimBriefUser.Value);
         SimBriefUser.PropertyChanged += (_, e) =>
