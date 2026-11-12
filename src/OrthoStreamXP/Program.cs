@@ -2,7 +2,11 @@ using System.Globalization;
 using OrthoStreamXP.Gui;
 
 // The installer's hooks first: on install, update or uninstall Velopack runs them and ends the process here.
-Velopack.VelopackApp.Build().OnBeforeUninstallFastCallback(_ => OrthoStreamXP.Setup.Installation.BeforeUninstall()).Run();
+// A downloaded update is not installed at start (Velopack's default): only when the person chooses it on the Home page.
+Velopack.VelopackApp.Build()
+    .SetAutoApplyOnStartup(false)
+    .OnBeforeUninstallFastCallback(_ => OrthoStreamXP.Setup.Installation.BeforeUninstall())
+    .Run();
 
 // The log, the settings file and the window's English text all use one number and date format, whatever
 // the PC's regional settings (WPF needs real culture data, so invariant globalization is not an option).

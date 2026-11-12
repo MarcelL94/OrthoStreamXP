@@ -24,6 +24,17 @@ public sealed class ViewsTests
                     page.Measure(new Size(1200, 900));
                     page.Arrange(new Rect(0, 0, 1200, 900));
                 }
+
+                // The update window, with notes and without.
+                foreach (string? notes in new[] { "## What's new\n\n- **Feature.** What it does.\n\nA paragraph.", null })
+                {
+                    var offer = new OrthoStreamXP.Gui.UpdateOffer("9.9.9", "1.0.0", OrthoStreamXP.Gui.ReleaseNotes.Parse(notes), "https://example.com");
+                    var dialog = new OrthoStreamXP.Gui.UpdateDialog(offer);
+                    var content = (FrameworkElement)dialog.Content;
+                    content.Measure(new Size(600, 560));
+                    content.Arrange(new Rect(0, 0, 600, 560));
+                    dialog.Close();
+                }
             }
             catch (Exception ex)
             {

@@ -13,6 +13,11 @@ internal sealed partial class MainWindow
         _main = main;
         DataContext = main;
         InitializeComponent();
+        // The Home page's Update button: the release notes first, installed only when confirmed.
+        _main.Home.UpdateOffered += (_, offer) =>
+        {
+            if (new UpdateDialog(offer) { Owner = this }.ShowDialog() == true) _main.Home.InstallConfirmedUpdate();
+        };
     }
 
     /// <summary>Closing while the scenery is mounted asks first, then unmounts before the window goes.</summary>

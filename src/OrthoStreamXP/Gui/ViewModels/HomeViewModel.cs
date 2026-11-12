@@ -45,8 +45,8 @@ internal sealed class HomeViewModel : ObservableObject, IPage
             ShowReviewOf(null);
         });
         _timer.Tick += (_, _) => Update();
-        // Installed only when chosen, and only while the scenery is not streaming: OrthoStreamXP restarts to do it.
-        InstallUpdate = new RelayCommand(_updates.ApplyAndRestart, () => _updates.Ready is not null && Mount.State == MountState.Stopped);
+        // Installed only when chosen (after the release notes), and only while the scenery is not streaming: OrthoStreamXP restarts to do it.
+        InstallUpdate = new RelayCommand(OfferUpdate, () => _updates.Ready is not null && Mount.State == MountState.Stopped);
         _updateTimer.Tick += async (_, _) =>
         {
             _updateTimer.Interval = TimeSpan.FromHours(6);
@@ -97,8 +97,23 @@ internal sealed class HomeViewModel : ObservableObject, IPage
     public ICommand OpenLog { get; }
     public ICommand RestartMount { get; }
 
-    /// <summary>Installs the downloaded version and restarts (only while the streaming is stopped).</summary>
+    /// <summary>Shows the downloaded version's release notes, to install it from there (only while the streaming is stopped).</summary>
     public ICommand InstallUpdate { get; }
+
+    /// <summary>The person asked to install the downloaded version: the window shows its notes and asks to confirm.</summary>
+    public event EventHandler<UpdateOffer>? UpdateOffered;
+
+    private void OfferUpdate()
+    {
+        if (_updates.ReadyVersion is not { } version) return;
+        UpdateOffered?.Invoke(this, new UpdateOffer(version, _updates.CurrentVersion, ReleaseNotes.Parse(_updates.ReadyNotes), AppUpdates.ReleasePage(version)));
+    }
+
+    /// <summary>Installs the downloaded version and restarts, once confirmed; not while the scenery streams.</summary>
+    public void InstallConfirmedUpdate()
+    {
+        if (Mount.State == MountState.Stopped) _updates.ApplyAndRestart();
+    }
     public ICommand ApplyReview { get; }
     public ICommand DismissReview { get; }
 
@@ -535,8 +550,8 @@ internal sealed class HomeViewModel : ObservableObject, IPage
         if (_updates.ReadyVersion is { } version)
             notices.Add(Mount.State == MountState.Stopped
                 ? new Notice(Severity.Info, $"OrthoStreamXP {version} is ready to install",
-                    $"A new version was downloaded (you have {_updates.CurrentVersion}). OrthoStreamXP restarts to install it; your settings, cache and flight history stay.",
-                    "Update and restart", InstallUpdate)
+                    $"A new version was downloaded (you have {_updates.CurrentVersion}). See what's new and install it when you choose; your settings, cache and flight history stay.",
+                    "Update…", InstallUpdate)
                 : new Notice(Severity.Info, $"OrthoStreamXP {version} is ready to install",
                     $"A new version was downloaded (you have {_updates.CurrentVersion}). Stop the streaming when you have finished flying, and install it from here."));
         if (_xplaneProblem is not null) notices.Add(_xplaneProblem);
