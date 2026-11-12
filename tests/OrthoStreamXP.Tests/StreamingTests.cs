@@ -1,3 +1,4 @@
+using System.Net;
 using OrthoStreamXP.Scenery;
 using OrthoStreamXP.Textures;
 
@@ -29,9 +30,9 @@ public sealed class StreamingTests : IDisposable
 
     /// <param name="level">-3: ZL16 textures are 1024 px from zoom 14, their base level 2 (zoom 12). -2: 2048 px from zoom 15, base level 3.</param>
     private Setup Streaming(int level = -3, double maxWait = 0.2, Func<int, TimeSpan>? delay = null, Setup? sharing = null, int detailedBuilds = 16,
-        long buildTiles = TextureStreamer.DefaultBuildTiles, Func<Uri, Task?>? hold = null, Daylight? nightPause = null)
+        long buildTiles = TextureStreamer.DefaultBuildTiles, Func<Uri, Task?>? hold = null, Func<int, HttpStatusCode>? status = null, Daylight? nightPause = null)
     {
-        FakeTileServer server = sharing?.Server ?? new FakeTileServer(delay: delay, hold: hold);
+        FakeTileServer server = sharing?.Server ?? new FakeTileServer(status: status, delay: delay, hold: hold);
         TileSource tiles = sharing?.Tiles ?? Track(new TileSource("test", FakeTileServer.Template, 32, handler: server) { Store = new TileStore(_tree.PathOf("base")) });
         var plan = new TexturePlan(level, TextureSizing.MaxSize);
         var roots = new SceneryRoots(_tree.PathOf("source"), _tree.PathOf("cache"), null, plan);
@@ -598,6 +599,77 @@ public sealed class StreamingTests : IDisposable
         await Until(() => s.Streamer.RealFrom(near) == 0 && s.Streamer.RealFrom(far) <= far.BaseMip);
         Assert.Equal(16, Zooms(s.Server).Count(z => z == 14));
         Assert.Equal(1, Zooms(s.Server).Count(z => z == 12));
+    }
+
+    [Fact]
+    public async Task A_texture_whose_base_tile_fails_leaves_the_queue_and_counts_one_build()
+    {
+        // M3: the base step kept its request whatever happened, so a texture without imagery was tried every pass all
+        // session, and each try counted as a build started.
+        Setup s = Streaming(status: zoom => zoom == 12 ? HttpStatusCode.InternalServerError : HttpStatusCode.OK);
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+
+        warmer.Prefetch([Texture()]);
+        await Until(() =>
+        {
+            warmer.StartWhatFits();
+            return warmer.WaitingFor(Texture()) is null;
+        });
+        for (int pass = 0; pass < 5; pass++) warmer.StartWhatFits(); // within the retry time: nothing more
+
+        Assert.Equal(1, warmer.Queued);
+        Assert.DoesNotContain(14, Zooms(s.Server)); // the level was never tried without its base
+    }
+
+    [Fact]
+    public async Task A_whole_texture_prefetched_ahead_of_XPlane_gets_its_base_tile_too()
+    {
+        // The flight-path prefetch: fetched whole before X-Plane loads it, then skipped by load-ahead as complete. Without
+        // its base tile the low-zoom base (far scenery, colour matching, the report's map) would stay empty there.
+        Setup s = Streaming();
+        using var warmer = new MipWarmer(new TextureCatalog(), s.Streamer, s.View, heavy: 2);
+        StreamedTexture t = s.Streamer.Get(Texture())!;
+
+        warmer.Prefetch([Texture()]);
+        await Until(() =>
+        {
+            warmer.StartWhatFits(); // as its loop does: the base tile, then the level
+            return s.Streamer.RealFrom(t) == 0 && s.Builder.StoreHasRegion(t.Name, t.ZoomFor(t.BaseMip));
+        });
+        int[] zooms = Zooms(s.Server);
+        Assert.Equal(1, zooms.Count(z => z == 12));
+        Assert.Equal(16, zooms.Count(z => z == 14));
+        Assert.Equal(12, zooms[0]); // the base tile before the level's tiles
+    }
+
+    [Fact]
+    public void XPlanes_smallest_read_takes_level_4_of_a_4096_px_texture()
+    {
+        // Its last 64 KB chunk starts inside level 3 (levels 4 and smaller are 43 KB): X-Plane is after level 4 at least.
+        Assert.Equal(4, ReadPattern.CoarsestRead(DdsLayout.For(4096)));
+        // 2048 px: it starts inside level 2, so level 3 (256 px again).
+        Assert.Equal(3, ReadPattern.CoarsestRead(DdsLayout.For(2048)));
+        // 1024 px: the last chunk starts inside level 1.
+        Assert.Equal(2, ReadPattern.CoarsestRead(DdsLayout.For(1024)));
+    }
+
+    [Fact]
+    public async Task Before_a_position_a_ZL18_texture_gets_the_level_XPlane_reads_at_least_not_just_its_base_tile()
+    {
+        // At EDDV 926 ZL18 textures waited while X-Plane loaded them: their base tile is level 6, X-Plane takes level 4.
+        Setup s = Streaming(level: 0);
+        var catalog = new TextureCatalog();
+        using var warmer = new MipWarmer(catalog, s.Streamer, s.View, heavy: 2);
+        catalog.AddTerrain(VirtualPath.Of("terrain", "90384_137776_BI18.ter"));
+        StreamedTexture t = s.Streamer.Get(Texture("90384_137776_BI18"))!;
+
+        await Until(() =>
+        {
+            warmer.StartWhatFits();
+            return s.Streamer.RealFrom(t) <= 4;
+        });
+        Assert.Equal(6, t.BaseMip);
+        Assert.Equal([14], Zooms(s.Server).Distinct()); // level 4 is one tile at zoom 14
     }
 
     [Fact]

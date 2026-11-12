@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using OrthoStreamXP.Textures;
 
@@ -56,6 +57,8 @@ internal sealed class MipWarmer : IDisposable
     private readonly int _heavyLimit;
     private readonly Lock _gate = new();
     private readonly Dictionary<string, Request> _waiting = [];
+    /// <summary>Textures whose base tile is being fetched before the level asked for (see <see cref="Target"/>).</summary>
+    private readonly ConcurrentDictionary<string, byte> _stepping = new();
     private readonly SemaphoreSlim _wake = new(0);
     private readonly CancellationTokenSource _stop = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -104,7 +107,10 @@ internal sealed class MipWarmer : IDisposable
         Wake();
     }
 
-    /// <summary>The flight-path prefetch: whole textures along the predicted path. Returns how many were queued.</summary>
+    /// <summary>
+    /// The flight-path prefetch: whole textures along the predicted path. Returns how many were queued. Each gets its
+    /// base tile first (see <see cref="Target"/>).
+    /// </summary>
     public int Prefetch(IReadOnlyList<VirtualPath> textures)
     {
         lock (_gate)
@@ -120,6 +126,22 @@ internal sealed class MipWarmer : IDisposable
         Wake();
     }
 
+    /// <summary>The level and priority the request waiting for <paramref name="texture"/> fetches now; null when none waits.</summary>
+    internal (int Mip, int Priority)? WaitingFor(VirtualPath texture)
+    {
+        Request request;
+        lock (_gate)
+            if (!_waiting.TryGetValue(texture.Key, out request)) return null;
+        return Target(request.Texture, request.Mip, request.Priority) is { } t ? (t.Mip, t.Priority) : null;
+    }
+
+    /// <summary>
+    /// The coarsest level worth fetching ahead: the base tile, or the finer level X-Plane's smallest read takes anyway
+    /// when that is finer (ZL18 textures: level 4, not their base level 6). Fetching only the base tile there made every
+    /// such texture wait while X-Plane loaded it (926 of 3,554 at EDDV).
+    /// </summary>
+    private static int Coarsest(StreamedTexture t) => Math.Min(t.BaseMip, ReadPattern.CoarsestRead(t.Layout));
+
     private void Wake()
     {
         if (_wake.CurrentCount == 0) _wake.Release();
@@ -129,8 +151,15 @@ internal sealed class MipWarmer : IDisposable
     internal (StreamedTexture Texture, int Mip, int Priority, double Distance)? Target(VirtualPath path, int? mip = null, int? priority = null)
     {
         if (_streamer.Get(path) is not { } t) return null;
+        // A level asked for ahead (the flight path) on a texture with nothing yet: its base tile first, in the base
+        // tiles' own places and before the middle levels. Load-ahead gives every texture one, but skips a texture that
+        // is whole already: the low-zoom base there (far scenery, colour matching, the report's map) would stay empty.
+        // And a far texture X-Plane reads before its base tile arrives gets one flat colour.
+        if (mip is int asked && asked < t.BaseMip && _streamer.RealFrom(t) > t.BaseMip)
+            return (t, t.BaseMip, Math.Min(priority ?? FetchPriority.Warm, FetchPriority.Warm),
+                _view.Current is { } at ? ViewTracker.DistanceM(at, t.Lat, t.Lon) : double.MaxValue);
         if (_view.Current is not { } camera)
-            return (t, mip ?? t.BaseMip, priority ?? FetchPriority.Background, double.MaxValue);
+            return (t, mip ?? Coarsest(t), priority ?? FetchPriority.Background, double.MaxValue);
         double distance = ViewTracker.DistanceM(camera, t.Lat, t.Lon);
         if (mip is int fixedMip) return (t, fixedMip, priority ?? FetchPriority.Warm, distance);
 
@@ -142,7 +171,7 @@ internal sealed class MipWarmer : IDisposable
             soon = Math.Max(0, distance - Math.Max(0, closing) * LeadSeconds);
         }
         int wanted = _streamer.Model.MipFor(soon, t.SizeM, t.Layout.Size);
-        int target = Math.Min(wanted, t.BaseMip);
+        int target = Math.Min(wanted, Coarsest(t));
         int targetPriority = TextureStreamer.BandOf(t, wanted) switch
         {
             Band.Near => FetchPriority.NearWarm,
@@ -187,6 +216,7 @@ internal sealed class MipWarmer : IDisposable
                 Remove(request);
                 continue;
             }
+            if (_stepping.ContainsKey(request.Texture.Key)) continue; // its base tile is on the way
             BuildKind kind = KindOf(t.Texture, t.Mip);
             if (Full(kind)) continue;
             if (_streamer.RealFrom(t.Texture) <= t.Mip)
@@ -200,17 +230,32 @@ internal sealed class MipWarmer : IDisposable
                 Remove(request);
                 continue;
             }
-            Remove(request);
-            Interlocked.Increment(ref _queued);
-            if (build.IsCompleted) continue;
-            Interlocked.Increment(ref _running[(int)kind]);
-            build.ContinueWith(_ =>
+            // A base step keeps the request: its level follows once the base tile is in. If the base tile fails (a
+            // provider gap, the sea, a 404), so would the level: the request goes, instead of being ranked and tried
+            // again every pass for the rest of the session.
+            bool baseStep = request.Mip is int final && final < t.Mip;
+            if (!baseStep) Remove(request);
+            if (build.IsCompleted)
             {
+                // Nothing started: it was there already, or it failed within the retry time.
+                if (baseStep && !Succeeded(build)) Remove(request);
+                continue;
+            }
+            Interlocked.Increment(ref _queued);
+            if (baseStep) _stepping[request.Texture.Key] = 0;
+            Interlocked.Increment(ref _running[(int)kind]);
+            string key = request.Texture.Key;
+            build.ContinueWith(done =>
+            {
+                if (baseStep && !Succeeded(done)) Remove(request);
                 Interlocked.Decrement(ref _running[(int)kind]);
+                _stepping.TryRemove(key, out byte _);
                 Wake();
             }, TaskScheduler.Default);
         }
     }
+
+    private static bool Succeeded(Task<bool> build) => build.IsCompletedSuccessfully && build.Result;
 
     private bool Full(BuildKind kind) => Volatile.Read(ref _running[(int)kind]) >= kind switch
     {
