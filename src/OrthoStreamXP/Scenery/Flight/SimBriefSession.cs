@@ -26,7 +26,7 @@ internal sealed class SimBriefSession
     /// <param name="aircraft">Where the aircraft is now, when X-Plane has sent a position.</param>
     /// <param name="run">Runs the ground pre-warm's queuing (tests run it inline).</param>
     /// <param name="alternate">The ground pre-warm builds the alternate too (<c>simbrief-alternate</c>).</param>
-    /// <param name="budget">The download limit (<c>simbrief-max-mb</c>); a reloaded new plan starts it again. Null: no limit.</param>
+    /// <param name="budget">The download limit (<c>simbrief-download-limit</c>); a reloaded new plan starts it again. Null: no limit.</param>
     public SimBriefSession(Func<CancellationToken, Task<SimBriefAnswer>> fetch, IReadOnlyList<DepartureTarget> departureTargets,
         IReadOnlyList<GroundTarget> groundTargets, Func<(double Lat, double Lon)?> aircraft, double radiusKm,
         TimeProvider? clock = null, Func<Action, Task>? run = null, bool alternate = false, PrefetchBudget? budget = null,
@@ -87,7 +87,7 @@ internal sealed class SimBriefSession
 
     private async Task<FlightPlan?> FetchFirstAsync()
     {
-        SimBriefAnswer answer = await _fetch(_stop).ConfigureAwait(false);
+        SimBriefAnswer answer = await FetchAsync().ConfigureAwait(false);
         if (answer.Problem is { } problem) Log.Warning($"SimBrief: {problem}");
         lock (_gate)
         {
@@ -120,7 +120,7 @@ internal sealed class SimBriefSession
         try
         {
             await FirstPlan.ConfigureAwait(false); // its answer first: the reload compares against it
-            SimBriefAnswer answer = await _fetch(_stop).ConfigureAwait(false);
+            SimBriefAnswer answer = await FetchAsync().ConfigureAwait(false);
             if (answer.Plan is not { } plan)
             {
                 Log.Info($"SimBrief: reloading the flight plan: {answer.Problem}");
@@ -157,6 +157,28 @@ internal sealed class SimBriefSession
         }
     }
 
+    /// <summary>
+    /// Asks SimBrief. The client answers its failures as a problem; anything it throws besides the stop (a bug) becomes
+    /// one too, so neither the first plan nor a reload ever ends faulted (the stop awaits them).
+    /// </summary>
+    private async Task<SimBriefAnswer> FetchAsync()
+    {
+        try
+        {
+            return await _fetch(_stop).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+        {
+            throw;
+        }
+#pragma warning disable CA1031 // The flight plan is a hint: whatever went wrong is logged as "no plan", never a reason for streaming to fail.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            return SimBriefAnswer.Failed($"the flight plan could not be read ({ex.GetType().Name})");
+        }
+    }
+
     /// <summary>The departure prefetch for a plan once it is there; a failure is only logged.</summary>
     private async Task PrefetchDepartureAsync(Task<FlightPlan?> plan)
     {
@@ -172,6 +194,16 @@ internal sealed class SimBriefSession
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Log.Warning($"SimBrief: departure prefetch failed ({ex.Message})");
+        }
+        catch (ObjectDisposedException) when (_stop.IsCancellationRequested)
+        {
+            // Streaming stopped while a package was queuing.
+        }
+#pragma warning disable CA1031 // Anything else is a bug, but on a background task nobody would see it: log it, don't lose it.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            Log.Warning($"SimBrief: departure prefetch failed unexpectedly ({ex.GetType().Name}: {ex.Message})");
         }
     }
 

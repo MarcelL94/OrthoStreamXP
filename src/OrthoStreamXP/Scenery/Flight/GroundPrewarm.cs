@@ -9,9 +9,11 @@ internal enum GroundDecision { None, Start, Stop, Rolled }
 /// <summary>
 /// When the ground pre-warm runs: once, after the aircraft has stood still at the flight plan's departure for a while
 /// (an airliner spends 10-15 minutes there before pushback), until it rolls for takeoff. Taxiing does not stop it; a
-/// position X-Plane did not send (placed from its reads) never starts it. The height known is the camera's, which an
-/// outside view lifts well above the aircraft: so it only keeps a paused aircraft in the air from starting it, and the
-/// stop goes by ground speed alone (no takeoff without it).
+/// position X-Plane did not send (placed from its reads) never starts it. Speed and on-ground are the aircraft's, as
+/// X-Plane sends them (<c>groundspeed</c>, <c>onground_any</c>), so moving or lifting the camera in an outside view
+/// changes nothing. Without them (an X-Plane that does not send them) it falls back to the speed worked out from the
+/// positions and the camera's height, which an outside view lifts: then the height only keeps a paused aircraft in the
+/// air from starting it.
 /// </summary>
 internal sealed class GroundWatch(double departureLat, double departureLon)
 {
@@ -27,14 +29,16 @@ internal sealed class GroundWatch(double departureLat, double departureLon)
     private bool _rolled;
 
     /// <param name="speedKt">Ground speed; null when X-Plane's positions have not moved enough to tell (standing still).</param>
-    /// <param name="heightM">The camera's height above the ground.</param>
-    public GroundDecision Update(double lat, double lon, double? speedKt, double heightM, bool inferred, DateTime at)
+    /// <param name="heightM">The camera's height above the ground (only used when <paramref name="onGround"/> is unknown).</param>
+    /// <param name="onGround">X-Plane's on-ground flag; null when X-Plane does not send it.</param>
+    public GroundDecision Update(double lat, double lon, double? speedKt, double heightM, bool inferred, DateTime at, bool? onGround = null)
     {
         double speed = speedKt ?? 0;
         switch (_state)
         {
             case State.Running:
-                if (speed <= RollingKt) return GroundDecision.None;
+                // Airborne without a takeoff roll seen (a position or speed missed) ends it too.
+                if (speed <= RollingKt && (inferred || onGround != false)) return GroundDecision.None;
                 _state = State.Done;
                 return GroundDecision.Stop;
             case State.Waiting when !_rolled && !inferred && speed > RollingKt:
@@ -43,7 +47,7 @@ internal sealed class GroundWatch(double departureLat, double departureLon)
                 _parkedSince = null;
                 return GroundDecision.Rolled;
             case State.Waiting:
-                bool parked = !inferred && speed <= ParkedKt && heightM <= OnGroundM
+                bool parked = !inferred && speed <= ParkedKt && (onGround ?? heightM <= OnGroundM)
                               && Geo.DistanceM(departureLat, departureLon, lat, lon) <= FlightPlan.NearDepartureKm * 1000;
                 if (!parked)
                 {
@@ -61,12 +65,14 @@ internal sealed class GroundWatch(double departureLat, double departureLon)
 }
 
 /// <summary>A mounted package as the ground pre-warm sees it: its DSFs, and how to queue and drop textures in its load-ahead.</summary>
-/// <param name="Prefetch">Queues textures placed by (distance X-Plane will see them from, order) at a phase (<see cref="MipWarmer.PrefetchGround"/>).</param>
+/// <param name="PrefetchAround">Queues the textures around an airport (lat, lon) at a phase, nearest first (<see cref="MipWarmer.PrefetchAround"/>).</param>
+/// <param name="PrefetchAlong">Queues textures placed by (distance X-Plane will see them from, order) at a phase: the climb (<see cref="MipWarmer.PrefetchGround"/>).</param>
 /// <param name="Cancel">Drops the ground pre-warm's textures still waiting; returns how many.</param>
 /// <param name="CancelDeparture">Drops the SimBrief departure's textures still waiting; returns how many.</param>
 /// <param name="Running">The builds running now, for the takeoff roll's log line (<see cref="MipWarmer.RunningSummary"/>).</param>
 internal sealed record GroundTarget(string Name, string Source,
-    Func<IReadOnlyList<VirtualPath>, Func<double, double, (double DistanceM, double Order)>, int, (int Queued, int Had)> Prefetch,
+    Func<IReadOnlyList<VirtualPath>, double, double, int?, (int Queued, int Had)> PrefetchAround,
+    Func<IReadOnlyList<VirtualPath>, Func<double, double, (double DistanceM, double Order)>, int, (int Queued, int Had)> PrefetchAlong,
     Func<int> Cancel, Func<int> CancelDeparture, Func<string>? Running = null);
 
 /// <summary>
@@ -125,7 +131,8 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
             DropDepartureIfElsewhere(flight, camera);
         }
         _watch ??= new GroundWatch(flight.Origin.Lat, flight.Origin.Lon);
-        switch (_watch.Update(camera.Lat, camera.Lon, camera.Motion?.SpeedMps * GroundWatch.KnotsPerMps, camera.HeightAglM, camera.Inferred, camera.ReceivedUtc))
+        double? speedKt = camera.GroundSpeedKt ?? camera.Motion?.SpeedMps * GroundWatch.KnotsPerMps;
+        switch (_watch.Update(camera.Lat, camera.Lon, speedKt, camera.HeightAglM, camera.Inferred, camera.ReceivedUtc, camera.OnGround))
         {
             case GroundDecision.Start:
                 int generation = _generation;
@@ -223,11 +230,7 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
             Log.Info($"Ground pre-warm: {target.Name} has no readable scenery tiles around the {what} {Name(airport)}");
             return 0;
         }
-        var (queued, had) = target.Prefetch(textures, (lat, lon) =>
-        {
-            double d = Geo.DistanceM(airport.Lat, airport.Lon, lat, lon);
-            return (d, d);
-        }, phase);
+        var (queued, had) = target.PrefetchAround(textures, airport.Lat, airport.Lon, phase);
         Log.Info($"Ground pre-warm: {what} {Name(airport)} - {textures.Count} textures in {tiles} scenery tiles: {had} already have what X-Plane will want, {queued} queued ({target.Name})");
         return queued;
     }
@@ -243,7 +246,7 @@ internal sealed class GroundPrewarm(Task<FlightPlan?> plan, IReadOnlyList<Ground
             return 0;
         }
         IReadOnlyList<VirtualPath> textures = SceneryArea.TexturesIn(target.Source, ClimbRoute.Tiles(climb.Samples), out int tiles);
-        var (queued, had) = target.Prefetch(textures, (lat, lon) => ClimbRoute.Nearest(climb.Samples, lat, lon), Route);
+        var (queued, had) = target.PrefetchAlong(textures, (lat, lon) => ClimbRoute.Nearest(climb.Samples, lat, lon), Route);
         Log.Info($"Ground pre-warm: the climb to {climb.End} ({climb.Nm:0} NM, {climb.Minutes:0} min) - {textures.Count} textures in {tiles} scenery tiles: " +
                  $"{had} already have what X-Plane will want, {queued} queued ({target.Name})");
         return queued;

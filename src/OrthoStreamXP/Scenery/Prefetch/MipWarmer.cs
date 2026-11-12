@@ -172,27 +172,53 @@ internal sealed class MipWarmer : IDisposable
     }
 
     /// <summary>
-    /// The SimBrief departure: every texture of the scenery X-Plane loads around the departure, each to the level X-Plane
-    /// will want with the aircraft there (full detail beside it, the middle levels further out, a base tile far away),
-    /// the same choice load-ahead makes once X-Plane sends a position, only made before X-Plane opens anything.
-    /// Returns how many were queued and how many had what they need already.
+    /// The scenery X-Plane loads around an airport of the SimBrief flight plan: the departure (<paramref name="phase"/>
+    /// null), or the ground pre-warm's arrival or alternate (<see cref="GroundPrewarm.Arrival"/>, <see cref="GroundPrewarm.Alternate"/>).
+    /// Every texture goes to the level X-Plane will want with the aircraft there (full detail beside it, the middle levels
+    /// further out, a base tile far away), the same choice load-ahead makes once X-Plane sends a position, only made
+    /// before X-Plane opens anything. The order is load-ahead's around a point: <see cref="PrefetchPlanner.Select"/>
+    /// without motion, nearest first. Returns how many were queued and how many had what they need already.
     /// </summary>
-    public (int Queued, int Had) PrefetchAround(IReadOnlyList<VirtualPath> textures, double lat, double lon) =>
-        PrefetchPlaced(textures, (tLat, tLon) =>
-        {
-            double d = Geo.DistanceM(lat, lon, tLat, tLon);
-            return (d, d);
-        }, phase: null);
+    public (int Queued, int Had) PrefetchAround(IReadOnlyList<VirtualPath> textures, double lat, double lon, int? phase = null)
+    {
+        var entries = new List<TextureCatalog.Entry>(textures.Count);
+        foreach (VirtualPath texture in textures)
+            if (_streamer.Get(texture) is { } t) entries.Add(new TextureCatalog.Entry(texture, t.Lat, t.Lon));
+        IReadOnlyList<VirtualPath> nearestFirst = PrefetchPlanner.Select(entries, lat, lon, motion: null, AroundRadiusKm, lookaheadSeconds: 0, int.MaxValue);
+        // The order is the distance in metres, as load-ahead's own requests are ranked by: Select's order, on the same scale.
+        var placed = new List<(VirtualPath Texture, double DistanceM, double Order)>(nearestFirst.Count);
+        foreach (VirtualPath texture in nearestFirst)
+            if (_streamer.Get(texture) is { } t)
+            {
+                double distance = Geo.DistanceM(lat, lon, t.Lat, t.Lon);
+                placed.Add((texture, distance, distance));
+            }
+        return PrefetchPlaced(placed, phase);
+    }
 
     /// <summary>
-    /// The ground pre-warm (<see cref="GroundPrewarm"/>): textures of the arrival, the alternate or the climb, each to
-    /// the level X-Plane will want from <paramref name="place"/>'s distance, ordered by its second value, below
-    /// everything X-Plane and the departure need (and the phases in their order: arrival, alternate, climb). A texture
-    /// already waiting for load-ahead or the departure keeps that request. Returns how many were queued and how many
-    /// had what they need already.
+    /// The radius <see cref="PrefetchAround"/> selects in: wider than the 3 x 4 DSF tiles X-Plane loads round a place
+    /// (<see cref="SceneryLoads.TilesAround"/>) reach from it anywhere, so the tiles alone decide what is queued.
     /// </summary>
-    public (int Queued, int Had) PrefetchGround(IReadOnlyList<VirtualPath> textures, Func<double, double, (double DistanceM, double Order)> place, int phase) =>
-        PrefetchPlaced(textures, place, phase);
+    internal const double AroundRadiusKm = 500;
+
+    /// <summary>
+    /// The ground pre-warm's climb (<see cref="GroundPrewarm"/>): each texture to the level X-Plane will want from
+    /// <paramref name="place"/>'s distance (to the nearest point of the climb: a line, not a point, so not
+    /// <see cref="PrefetchPlanner.Select"/>'s order), ordered by its second value (along the climb). A texture already
+    /// waiting for anything else keeps that request. Returns how many were queued and how many had what they need already.
+    /// </summary>
+    public (int Queued, int Had) PrefetchGround(IReadOnlyList<VirtualPath> textures, Func<double, double, (double DistanceM, double Order)> place, int phase)
+    {
+        var placed = new List<(VirtualPath Texture, double DistanceM, double Order)>(textures.Count);
+        foreach (VirtualPath texture in textures)
+            if (_streamer.Get(texture) is { } t)
+            {
+                var (distance, order) = place(t.Lat, t.Lon);
+                placed.Add((texture, distance, order));
+            }
+        return PrefetchPlaced(placed, phase);
+    }
 
     /// <summary>Drops the ground pre-warm's requests still waiting (the takeoff roll, a newer plan); returns how many.</summary>
     public int CancelGround()
@@ -206,6 +232,20 @@ internal sealed class MipWarmer : IDisposable
     public string RunningSummary() =>
         $"{Volatile.Read(ref _running[(int)BuildKind.Heavy])} detailed, {Volatile.Read(ref _running[(int)BuildKind.Small])} small and " +
         $"{Volatile.Read(ref _running[(int)BuildKind.Base])} base builds running, {Volatile.Read(ref _groundRunning)} of them the ground pre-warm's";
+
+    /// <summary>A build runs in this package: one of load-ahead's, or one for X-Plane's reads.</summary>
+    public bool Building
+    {
+        get
+        {
+            for (int kind = 0; kind < _running.Length; kind++)
+                if (Volatile.Read(ref _running[kind]) > 0) return true;
+            return _streamer.Building > 0;
+        }
+    }
+
+    /// <summary>X-Plane's reads of this package's textures so far (<see cref="TextureStreamer.Reads"/>).</summary>
+    public long XPlaneReads => _streamer.Reads;
 
     /// <summary>The ground pre-warm queued work that has not all been built yet.</summary>
     public bool GroundPending => _groundPending;
@@ -250,16 +290,19 @@ internal sealed class MipWarmer : IDisposable
         }
     }
 
-    private (int Queued, int Had) PrefetchPlaced(IReadOnlyList<VirtualPath> textures, Func<double, double, (double DistanceM, double Order)> place, int? phase)
+    /// <summary>
+    /// Queues the SimBrief prefetch's textures, each placed by the distance X-Plane will see it from (its level) and its
+    /// order among them. Every phase gives way to what load-ahead and the flight path want (<see cref="AddOrOutrank"/>).
+    /// </summary>
+    private (int Queued, int Had) PrefetchPlaced(List<(VirtualPath Texture, double DistanceM, double Order)> placed, int? phase)
     {
-        var requests = new List<Request>(textures.Count);
+        var requests = new List<Request>(placed.Count);
         int had = 0;
         PrefetchMeter meter = _phases[phase is int which ? which + 1 : 0];
         if (_budget is { Exhausted: true }) return (0, 0); // spent: left to load-ahead
-        foreach (VirtualPath texture in textures)
+        foreach (var (texture, distance, order) in placed)
         {
             if (_streamer.Get(texture) is not { } t) continue;
-            var (distance, order) = place(t.Lat, t.Lon);
             int wanted = _streamer.Model.MipFor(distance, t.SizeM, t.Layout.Size);
             int mip = Math.Min(wanted, Coarsest(t));
             int real = _streamer.RealFrom(t);
@@ -281,11 +324,7 @@ internal sealed class MipWarmer : IDisposable
         var queued = new List<VirtualPath>(requests.Count);
         lock (_gate)
             foreach (Request request in requests)
-            {
-                if (!request.Ground) _waiting[request.Texture.Key] = request;
-                else if (!AddOrOutrank(request)) continue;
-                queued.Add(request.Texture);
-            }
+                if (AddOrOutrank(request)) queued.Add(request.Texture);
         foreach (VirtualPath texture in queued) meter.NoteQueued(texture); // off the gate: X-Plane's loads wait on it
         if (queued.Count > 0) _prefetched = true;
         if (meter.Ground && queued.Count > 0) _groundPending = true;
@@ -318,25 +357,35 @@ internal sealed class MipWarmer : IDisposable
     }
 
     /// <summary>
-    /// Queues <paramref name="request"/> unless the texture waits already. A waiting ground pre-warm request gives way to
-    /// any other one: it ranks below everything, and <see cref="CancelGround"/> would drop it on the takeoff roll,
-    /// taking X-Plane's own load-ahead request with it. A ground request never replaces a waiting one. Under the gate.
+    /// Queues <paramref name="request"/> unless a request of the same or a higher rank waits for the texture already
+    /// (<see cref="Rank"/>: load-ahead and the flight path, then the SimBrief departure, then the ground pre-warm). The
+    /// SimBrief requests give way because their level is a guess made at the gate, and the takeoff roll drops them
+    /// (<see cref="CancelGround"/>, <see cref="CancelDeparture"/>): taking a waiting load-ahead request with them would
+    /// leave a texture X-Plane loaded without one (H1). A newer departure request replaces a waiting one (a reloaded
+    /// plan); a ground request never replaces one. Under the gate.
     /// </summary>
     private bool AddOrOutrank(Request request)
     {
         string key = request.Texture.Key;
-        if (_waiting.TryGetValue(key, out Request existing) && (request.Ground || !existing.Ground)) return false;
+        if (_waiting.TryGetValue(key, out Request existing))
+        {
+            int rank = Rank(request), current = Rank(existing);
+            if (rank < current || (rank == current && (request.Ground || existing.Meter is null))) return false;
+        }
         _waiting[key] = request;
         return true;
     }
 
+    /// <summary>Which request keeps a texture: 2 load-ahead and the flight path, 1 the SimBrief departure, 0 the ground pre-warm.</summary>
+    private static int Rank(Request request) => request.Meter is null ? 2 : request.Ground ? 0 : 1;
+
     /// <summary>The level and priority the request waiting for <paramref name="texture"/> fetches now; null when none waits.</summary>
-    internal (int Mip, int Priority, bool Ground)? WaitingFor(VirtualPath texture)
+    internal (int Mip, int Priority, bool Ground, double Order)? WaitingFor(VirtualPath texture)
     {
         Request request;
         lock (_gate)
             if (!_waiting.TryGetValue(texture.Key, out request)) return null;
-        return Target(request.Texture, request.Mip, request.Priority, request.Distance) is { } t ? (t.Mip, t.Priority, request.Ground) : null;
+        return Target(request.Texture, request.Mip, request.Priority, request.Distance) is { } t ? (t.Mip, t.Priority, request.Ground, t.Distance) : null;
     }
 
     private void Wake()
@@ -465,7 +514,7 @@ internal sealed class MipWarmer : IDisposable
         if (dropped > 0) _groundPending = false; // not all built: nothing to give back for
         if (budget.FirstToReport())
             Log.Info($"SimBrief prefetch: the download budget of {CacheInventory.FormatBytes(budget.LimitBytes)} is used up " +
-                     $"(simbrief-max-mb); {dropped} textures still waiting are left to load-ahead");
+                     $"(simbrief-download-limit); {dropped} textures still waiting are left to load-ahead");
     }
 
     /// <summary>

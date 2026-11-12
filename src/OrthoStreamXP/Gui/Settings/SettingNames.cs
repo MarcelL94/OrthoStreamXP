@@ -24,7 +24,7 @@ internal static class SettingNames
         ["xplane-arguments"] = "X-Plane start options",
         ["simbrief-user"] = "SimBrief departure prefetch",
         ["simbrief-radius-km"] = "SimBrief departure prefetch",
-        ["simbrief-max-mb"] = "SimBrief prefetch download limit",
+        ["simbrief-download-limit"] = "SimBrief prefetch download limit",
         ["simbrief-alternate"] = "SimBrief alternate airport",
     };
 

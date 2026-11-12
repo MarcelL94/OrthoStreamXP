@@ -14,6 +14,10 @@ When streaming starts and while you sit at the gate, OrthoStreamXP builds the sc
 
 When the aircraft rolls for takeoff (faster than 40 kt), whatever has not started yet is dropped and the normal scenery loading takes over. Photos already in the cache are never downloaded again.
 
+The gate and the takeoff roll are told by the aircraft's own ground speed and X-Plane's "on the ground" flag, so moving or lifting the camera in an outside view does not count as a takeoff.
+
+**With mip streaming off** only the departure is built, whole textures within `simbrief-radius-km` of the airport, and only as many as the background build queue takes at once (4 × `dds-build-workers`). These builds do not count against the download limit, are not in the per-phase summary in the log, and are not dropped on the takeoff roll. The arrival, the climb and the alternate need mip streaming.
+
 ## Setting it up
 
 Enter your SimBrief username, or your Pilot ID (the number in your SimBrief account settings):
@@ -49,7 +53,7 @@ While **Build my SimBrief flight's scenery ahead** is on, the line below the but
 
 - **An old flight plan.** A plan generated more than 6 hours ago is taken for an earlier flight: its departure is not built. Generate a new one, then press **Reload SimBrief flight plan**.
 - **The aircraft is somewhere else.** If X-Plane places your aircraft more than 50 km from the plan's departure airport, the plan is not this flight's: the departure textures still waiting are dropped.
-- **The download limit.** The SimBrief prefetch downloads at most 1000 MB per streaming session (`simbrief-max-mb`). After that, the rest is left to the normal scenery loading. Your own flying never counts against the limit.
+- **The download limit.** The SimBrief prefetch downloads at most 1000 MB per streaming session (`simbrief-download-limit`). After that, the rest is left to the normal scenery loading. Your own flying never counts against the limit.
 
 The log says each time why something was skipped.
 
@@ -61,9 +65,11 @@ These are in `orthostreamxp.ini` (see [Settings](settings.md)):
 |---|---|---|
 | `simbrief-user` | Your SimBrief username or Pilot ID. Empty: off. | empty |
 | `simbrief-alternate` | `on`: build the alternate airport too, after the arrival. | `off` |
-| `simbrief-max-mb` | The most the SimBrief prefetch may download per streaming session, in MB. `0`: no limit. | `1000` |
+| `simbrief-download-limit` | The most the SimBrief prefetch may download per streaming session, in MB. `0`: no limit. | `1000` |
 | `simbrief-radius-km` | With mip streaming off: how far around the departure airport textures are built at full detail, 1-50 km. | `10` |
 
 ## Privacy
 
-OrthoStreamXP sends your SimBrief username (or Pilot ID) to simbrief.com over HTTPS, once when streaming starts and each time you press **Reload SimBrief flight plan**. Nothing else is sent. The username is never written to the log.
+OrthoStreamXP sends your SimBrief username (or Pilot ID) to simbrief.com over HTTPS, once when streaming starts and each time you press **Reload SimBrief flight plan**. Nothing else is sent. The username is never written to the log, the flight reports or the setup summary.
+
+It is stored in `orthostreamxp.ini` (`simbrief-user`). If you attach that file to a bug report, delete that line first.

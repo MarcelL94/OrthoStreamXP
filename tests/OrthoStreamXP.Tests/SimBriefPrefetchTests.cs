@@ -103,6 +103,50 @@ public sealed class SimBriefPrefetchTests : IDisposable
         });
     }
 
+    [Theory]
+    [InlineData("""{"fetch":"Success","origin":{"pos_lat":"48.3","pos_long":"11.7"}}""")] // fetch as a string
+    [InlineData("""{"fetch":{"status":1},"origin":{"pos_lat":"48.3","pos_long":"11.7"}}""")] // status as a number
+    [InlineData("""{"fetch":{"status":"Success"},"origin":"EDDM"}""")] // an airport as a string
+    [InlineData("""["not", "an", "object"]""")]
+    [InlineData("""{"fetch":{"status":"Success"},"origin":{"pos_lat":"48.3","pos_long":"11.7"},"navlog":""}""")]
+    [InlineData("""{"fetch":{"status":"Success"},"origin":{"pos_lat":"48.3","pos_long":"11.7"},"navlog":{"fix":["a", 1, null]},"params":""}""")]
+    [InlineData("""{"fetch":{"status":"Success"},"origin":{"pos_lat":1e999,"pos_long":"11.7"}}""")]
+    [InlineData("""{"fetch":{"status":"Success"},"origin":{"pos_lat":"48.3","pos_long":"11.7"},"alternate":[]}""")]
+    public void An_answer_of_an_unexpected_shape_is_read_or_refused_never_thrown(string json)
+    {
+        // Maintainer, #30 item 1: InvalidOperationException from a field of another type broke the stop.
+        SimBriefAnswer answer = SimBriefClient.Parse(json);
+        Assert.True(answer.Plan is not null || answer.Problem is not null);
+    }
+
+    [Fact]
+    public void The_shapes_SimBrief_leaves_empty_still_give_the_plan()
+    {
+        // SimBrief sends "" for an empty object: the plan is read without the navlog's junk or its times.
+        SimBriefAnswer answer = SimBriefClient.Parse("""
+            {"fetch":{"status":"Success"},"origin":{"icao_code":"EDDM","pos_lat":"48.3","pos_long":"11.7"},
+             "navlog":{"fix":["junk", {"ident":"TOC","pos_lat":"48.5","pos_long":"11.9","stage":"CLB"}]},"params":""}
+            """);
+        Assert.Equal("EDDM", answer.Origin!.Icao);
+        Assert.Equal(["TOC"], answer.Plan!.Route.Select(p => p.Ident));
+        Assert.Null(answer.Plan.Generated);
+        Assert.Equal("SimBrief's answer could not be read", SimBriefClient.Parse("""{"fetch":{"status":1}}""").Problem);
+    }
+
+    [Fact]
+    public async Task A_fetch_that_throws_leaves_no_plan_and_ends_the_session_cleanly()
+    {
+        // The stop awaits WhenDone: a fault there kept the listener and the packages from being disposed.
+        var (session, _, departure, _) = Session(() => throw new InvalidOperationException("a bug"));
+        session.Start();
+        await session.WhenDone(); // does not throw
+        Assert.Null(await session.FirstPlan);
+        Assert.Empty(departure);
+        Assert.StartsWith("No flight plan: the flight plan could not be read", await session.DescribeFirstAsync(), StringComparison.Ordinal);
+        Assert.StartsWith("No flight plan", await session.ReloadAsync(), StringComparison.Ordinal);
+        await session.WhenDone();
+    }
+
     [Fact]
     public void A_number_is_the_pilot_id_anything_else_the_username()
     {
@@ -270,7 +314,7 @@ public sealed class SimBriefPrefetchTests : IDisposable
             lock (departure) departure.AddRange(textures);
             return textures.Count;
         });
-        var ground = new GroundTarget("pkg", package, (_, _, _) => (0, 0), () => ++cancels, () => ++cancelDepartures);
+        var ground = new GroundTarget("pkg", package, (_, _, _, _) => (0, 0), (_, _, _) => (0, 0), () => ++cancels, () => ++cancelDepartures);
         var session = new SimBriefSession(_ => answers[Math.Min(Interlocked.Increment(ref fetches), answers.Length) - 1](), [target], [ground],
             () => null, radiusKm: 10, Clock, run: _ =>
             {
@@ -468,11 +512,11 @@ public sealed class SimBriefPrefetchTests : IDisposable
         Assert.Throws<SettingsException>(() => Parse("simbrief-radius-km = 51"));
 
         // R4: the download budget, 1000 MB unless set; 0 is no limit.
-        Assert.Equal(MountSettings.DefaultSimBriefMaxMb, Parse().SimBriefMaxMb);
-        Assert.Equal(1000, MountSettings.DefaultSimBriefMaxMb);
-        Assert.Equal(0, Parse("simbrief-max-mb = 0").SimBriefMaxMb);
-        Assert.Equal(250, Parse("simbrief-max-mb = 250").SimBriefMaxMb);
-        Assert.Throws<SettingsException>(() => Parse("simbrief-max-mb = -1"));
+        Assert.Equal(MountSettings.DefaultSimBriefDownloadLimitMb, Parse().SimBriefDownloadLimitMb);
+        Assert.Equal(1000, MountSettings.DefaultSimBriefDownloadLimitMb);
+        Assert.Equal(0, Parse("simbrief-download-limit = 0").SimBriefDownloadLimitMb);
+        Assert.Equal(250, Parse("simbrief-download-limit = 250").SimBriefDownloadLimitMb);
+        Assert.Throws<SettingsException>(() => Parse("simbrief-download-limit = -1"));
 
         // The alternate: off unless switched on.
         Assert.False(Parse().SimBriefAlternate);

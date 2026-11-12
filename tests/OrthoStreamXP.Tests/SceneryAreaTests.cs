@@ -43,22 +43,22 @@ public sealed class SceneryAreaTests : IDisposable
     public void XPlane_loads_three_rows_by_four_columns_leaning_to_the_nearer_half()
     {
         // EDDV (52.46 N, 9.68 E): X-Plane 12 loaded +51..+53 x +008..+011.
-        var tiles = SceneryArea.TilesAround(52.46, 9.68);
+        var tiles = SceneryLoads.TilesAround(52.46, 9.68);
         Assert.Equal(12, tiles.Count);
         Assert.Equal([51, 52, 53], tiles.Select(t => t.Lat).Distinct());
         Assert.Equal([8, 9, 10, 11], tiles.Select(t => t.Lon).Distinct());
 
         // In the western half of the column, one more to the west.
-        Assert.Equal([7, 8, 9, 10], SceneryArea.TilesAround(52.46, 9.2).Select(t => t.Lon).Distinct());
+        Assert.Equal([7, 8, 9, 10], SceneryLoads.TilesAround(52.46, 9.2).Select(t => t.Lon).Distinct());
         // Across the antimeridian.
-        Assert.Equal([178, 179, -180, -179], SceneryArea.TilesAround(-17.7, 179.6).Select(t => t.Lon).Distinct());
+        Assert.Equal([178, 179, -180, -179], SceneryLoads.TilesAround(-17.7, 179.6).Select(t => t.Lon).Distinct());
     }
 
     [Fact]
     public void A_DSF_lives_in_its_ten_degree_folder()
     {
-        Assert.Equal(Path.Join("pkg", "Earth nav data", "+50+000", "+52+009.dsf"), SceneryArea.DsfPath("pkg", 52, 9));
-        Assert.Equal(Path.Join("pkg", "Earth nav data", "-40-060", "-34-059.dsf"), SceneryArea.DsfPath("pkg", -34, -59));
+        Assert.Equal(Path.Join("pkg", "Earth nav data", "+50+000", "+52+009.dsf"), DsfTerrain.PathIn("pkg", 52, 9));
+        Assert.Equal(Path.Join("pkg", "Earth nav data", "-40-060", "-34-059.dsf"), DsfTerrain.PathIn("pkg", -34, -59));
     }
 
     [Fact]

@@ -2,7 +2,7 @@ namespace OrthoStreamXP.Scenery;
 
 /// <summary>
 /// The most the SimBrief prefetch (the departure and the ground pre-warm, every package together) may download in one
-/// session (<c>simbrief-max-mb</c>, R4): an arrival, alternate and climb can mean thousands of tiles, and a provider
+/// session (<c>simbrief-download-limit</c>, R4): an arrival, alternate and climb can mean thousands of tiles, and a provider
 /// that rate-limits or blocks the program would hit every user. Spent by the prefetch's own builds only, in the
 /// phases' order (their priorities); load-ahead and X-Plane's reads never count. Builds already running finish.
 /// A reloaded new flight plan (a turnaround) starts it again: the limit is per flight plan within the session.

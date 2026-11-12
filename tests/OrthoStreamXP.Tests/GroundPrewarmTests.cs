@@ -172,6 +172,42 @@ public sealed class GroundPrewarmTests : IDisposable
     }
 
     [Fact]
+    public void With_XPlanes_on_ground_flag_the_camera_height_does_not_matter()
+    {
+        // R6/M4: an outside view lifts the camera well above the aircraft. With onground_any it starts all the same, and
+        // the aircraft lifting off ends it even if no roll faster than 40 kt was seen.
+        var t0 = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        var high = new GroundWatch(Eddv.Lat, Eddv.Lon);
+        Assert.Equal(GroundDecision.None, high.Update(Eddv.Lat, Eddv.Lon, 0, 2000, false, t0, onGround: true));
+        Assert.Equal(GroundDecision.Start, high.Update(Eddv.Lat, Eddv.Lon, 0, 2000, false, t0.AddSeconds(31), onGround: true));
+        Assert.Equal(GroundDecision.None, high.Update(Eddv.Lat, Eddv.Lon, 20, 2000, false, t0.AddSeconds(60), onGround: true)); // taxiing
+        Assert.Equal(GroundDecision.Stop, high.Update(Eddv.Lat, Eddv.Lon, 30, 50, false, t0.AddSeconds(90), onGround: false)); // airborne
+
+        // Paused in the air: X-Plane says so, whatever the camera's height.
+        var air = new GroundWatch(Eddv.Lat, Eddv.Lon);
+        air.Update(Eddv.Lat, Eddv.Lon, 0, 3, false, t0, onGround: false);
+        Assert.Equal(GroundDecision.None, air.Update(Eddv.Lat, Eddv.Lon, 0, 3, false, t0.AddMinutes(2), onGround: false));
+    }
+
+    [Fact]
+    public void XPlanes_own_ground_speed_wins_over_the_speed_worked_out_from_the_positions()
+    {
+        // Moving the camera fast in an outside view, a pushback or a reposition: the speed from the positions is not the aircraft's.
+        int departure = 0;
+        var plan = Task.FromResult<FlightPlan?>(new FlightPlan(Eddv, Eddf, null, []));
+        var prewarm = new GroundPrewarm(plan, [new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _, _) => (0, 0), (_, _, _) => (0, 0), () => 0, () => ++departure)]);
+        var t0 = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        CameraReport At(double seconds, double motionKt, double? xplaneKt) =>
+            new(Eddv.Lat, Eddv.Lon, 3, null, new Motion(motionKt / GroundWatch.KnotsPerMps, 270), false, t0.AddSeconds(seconds),
+                GroundSpeedKt: xplaneKt, OnGround: true);
+
+        prewarm.OnCamera(At(0, 80, 0));
+        Assert.Equal(0, departure); // 80 kt from the positions, 0 kt from X-Plane: standing
+        prewarm.OnCamera(At(1, 80, 60));
+        Assert.Equal(1, departure); // X-Plane's 60 kt: the roll
+    }
+
+    [Fact]
     public void A_takeoff_roll_before_the_prewarm_ran_is_said_once()
     {
         var watch = new GroundWatch(Eddv.Lat, Eddv.Lon);
@@ -195,7 +231,7 @@ public sealed class GroundPrewarmTests : IDisposable
 
         // Taxied out at once: the pre-warm never started, the departure's requests still go.
         int ground = 0, departure = 0;
-        var target = new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _) => (0, 0), () => ++ground, () => ++departure);
+        var target = new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _, _) => (0, 0), (_, _, _) => (0, 0), () => ++ground, () => ++departure);
         var prewarm = new GroundPrewarm(plan, [target]);
         prewarm.OnCamera(At(0, 10));
         prewarm.OnCamera(At(60, 60));
@@ -205,7 +241,7 @@ public sealed class GroundPrewarmTests : IDisposable
 
         // Parked long enough: the pre-warm ran, and the roll drops both.
         int ground2 = 0, departure2 = 0;
-        var target2 = new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _) => (0, 0), () => ++ground2, () => ++departure2);
+        var target2 = new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _, _) => (0, 0), (_, _, _) => (0, 0), () => ++ground2, () => ++departure2);
         var ran = new GroundPrewarm(plan, [target2]);
         ran.OnCamera(At(0, 0));
         ran.OnCamera(At(31, 0)); // starts (queues nothing: the package has no scenery here)
@@ -220,7 +256,7 @@ public sealed class GroundPrewarmTests : IDisposable
         var plan = Task.FromResult<FlightPlan?>(new FlightPlan(Eddv, Eddf, null, []));
         var t0 = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
         int departure = 0;
-        var prewarm = new GroundPrewarm(plan, [new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _) => (0, 0), () => 0, () => ++departure)]);
+        var prewarm = new GroundPrewarm(plan, [new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _, _) => (0, 0), (_, _, _) => (0, 0), () => 0, () => ++departure)]);
 
         prewarm.OnCamera(new CameraReport(Eddv.Lat, Eddv.Lon, 3, null, null, false, t0, Inferred: true)); // placed from X-Plane's reads: not a position
         Assert.Equal(0, departure);
@@ -230,7 +266,7 @@ public sealed class GroundPrewarmTests : IDisposable
         Assert.Equal(1, departure); // only the first position
 
         int atGate = 0;
-        var here = new GroundPrewarm(plan, [new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _) => (0, 0), () => 0, () => ++atGate)]);
+        var here = new GroundPrewarm(plan, [new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _, _) => (0, 0), (_, _, _) => (0, 0), () => 0, () => ++atGate)]);
         here.OnCamera(new CameraReport(Eddv.Lat + 0.01, Eddv.Lon, 3, null, null, false, t0));
         Assert.Equal(0, atGate);
     }
@@ -248,7 +284,7 @@ public sealed class GroundPrewarmTests : IDisposable
         var (pkg, _) = Package(Everywhere);
         var target = pkg with
         {
-            Prefetch = (_, _, _) =>
+            PrefetchAround = (_, _, _, _) =>
             {
                 calls++;
                 stop.Cancel(); // streaming stops during the first phase...
@@ -272,7 +308,7 @@ public sealed class GroundPrewarmTests : IDisposable
     {
         var plan = Task.FromResult<FlightPlan?>(new FlightPlan(Eddv, Eddf, null, []));
         var (pkg, _) = Package(Everywhere);
-        var target = pkg with { Prefetch = (_, _, _) => throw new InvalidOperationException("a bug") };
+        var target = pkg with { PrefetchAround = (_, _, _, _) => throw new InvalidOperationException("a bug") };
         var lines = new List<string>();
         void Sink(string line)
         {
@@ -302,7 +338,7 @@ public sealed class GroundPrewarmTests : IDisposable
         var plan = Task.FromResult<FlightPlan?>(new FlightPlan(Eddv, Eddf, null, []));
         Action? pending = null;
         int cancels = 0;
-        var target = new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _) => (0, 0), () => ++cancels, () => 0);
+        var target = new GroundTarget("pkg", _tree.PathOf("pkg"), (_, _, _, _) => (0, 0), (_, _, _) => (0, 0), () => ++cancels, () => 0);
         var lines = new List<string>();
         void Sink(string line)
         {
@@ -341,11 +377,15 @@ public sealed class GroundPrewarmTests : IDisposable
         int n = 0;
         foreach (var (lat, lon) in tiles)
         {
-            string path = SceneryArea.DsfPath("pkg", lat, lon).Replace('\\', '/');
+            string path = DsfTerrain.PathIn("pkg", lat, lon).Replace('\\', '/');
             _tree.WriteBytes(path, SceneryAreaTests.Dsf($"terrain/{21552 + 16 * n++}_34576_BI16.ter"));
         }
         var calls = new List<Call>();
-        var target = new GroundTarget("pkg", _tree.PathOf("pkg"), (textures, place, phase) =>
+        var target = new GroundTarget("pkg", _tree.PathOf("pkg"), (textures, lat, lon, phase) =>
+        {
+            calls.Add(new Call(phase ?? -1, textures.Count, Geo.DistanceM(lat, lon, Eddv.Lat, Eddv.Lon)));
+            return (textures.Count, 0);
+        }, (textures, place, phase) =>
         {
             calls.Add(new Call(phase, textures.Count, place(Eddv.Lat, Eddv.Lon).DistanceM));
             return (textures.Count, 0);

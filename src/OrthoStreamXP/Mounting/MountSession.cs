@@ -213,27 +213,30 @@ internal sealed class MountSession : IDisposable
             .Select(m => (Mount: m, Prefetch: m.Warmer is { } warmer ? warmer.Prefetch : m.Scheduler is { } scheduler ? scheduler.Prefetch : (Func<IReadOnlyList<VirtualPath>, int>?)null))
             .Where(m => m.Prefetch is not null)
             .Select(m => new DepartureTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, path => m.Mount.Roots.CachedFile(path) is not null, m.Prefetch!,
-                m.Mount.Warmer is { } warmer ? warmer.PrefetchAround : null))];
+                m.Mount.Warmer is { } warmer ? (textures, lat, lon) => warmer.PrefetchAround(textures, lat, lon) : null))];
         if (targets.Length == 0)
         {
             Log.Info("SimBrief: departure prefetch needs an imagery provider and load-ahead (or aircraft tracking); it is off for this run");
             return;
         }
+        if (_mounts.All(m => m.Warmer is null))
+            Log.Info("SimBrief: mip streaming is off, so only the departure is built (whole textures, as many as the background queue takes); " +
+                     "not counted against the download limit and not dropped on the takeoff roll");
         _simBrief = new HttpClient();
         var client = new SimBriefClient(_simBrief);
         AircraftPositionListener? listener = _listener;
         PrefetchBudget? budget = null;
-        if (_settings.SimBriefMaxMb > 0)
+        if (_settings.SimBriefDownloadLimitMb > 0)
         {
-            budget = new PrefetchBudget(_settings.SimBriefMaxMb * 1024L * 1024);
+            budget = new PrefetchBudget(_settings.SimBriefDownloadLimitMb * 1024L * 1024);
             foreach (PackageMount mount in _mounts) mount.Warmer?.UseBudget(budget);
         }
         // The ground pre-warm needs X-Plane's positions.
         GroundTarget[] ground = listener is null ? [] : [.. _mounts.Where(m => m.Warmer is not null)
             .Select(m => (Mount: m, Warmer: m.Warmer!))
-            .Select(m => new GroundTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, m.Warmer.PrefetchGround, m.Warmer.CancelGround,
+            .Select(m => new GroundTarget(m.Mount.Plan.Name, m.Mount.Plan.Source, m.Warmer.PrefetchAround, m.Warmer.PrefetchGround, m.Warmer.CancelGround,
                 m.Warmer.CancelDeparture, m.Warmer.RunningSummary))];
-        if (ground.Length > 0) PrewarmMemory.Watch([.. _mounts.Select(m => m.Warmer).OfType<MipWarmer>()]);
+        if (ground.Length > 0) PrewarmMemory.Watch([.. _mounts.Select(m => m.Warmer).OfType<MipWarmer>()], _summaries.Token);
         var simBrief = new SimBriefSession(ct => client.FetchAsync(user, ct), targets, ground,
             () => listener?.Latest is { } at ? (at.Lat, at.Lon) : null, _settings.SimBriefRadiusKm,
             alternate: _settings.SimBriefAlternate, stop: _summaries.Token, budget: budget);
@@ -350,19 +353,10 @@ internal sealed class MountSession : IDisposable
                 await finished.ConfigureAwait(false);
         }
         // SimBrief's departure prefetch, reload and ground pre-warm queue into the packages' load-ahead: they end before
-        // the packages are disposed.
-        foreach (Task? loop in new[] { _summaryLoop, _sampleLoop, _simBriefSession?.WhenDone() })
-        {
-            if (loop is null) continue;
-            try
-            {
-                await loop.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                // Stopped.
-            }
-        }
+        // the packages are disposed. A failure there is a bug, but only logged: the listener and the packages must still go.
+        foreach (Task? loop in new[] { _summaryLoop, _sampleLoop })
+            await EndAsync(loop, "").ConfigureAwait(false);
+        await EndAsync(_simBriefSession?.WhenDone(), "SimBrief prefetch").ConfigureAwait(false);
         _listener?.Dispose();
         foreach (PackageMount mount in _mounts) mount.Dispose();
         _tiles?.Dispose();
@@ -371,6 +365,26 @@ internal sealed class MountSession : IDisposable
         _summaries.Dispose();
         // Every file is closed now: the cache can be kept within its limit.
         if (summaries && !hurry) TrimCache();
+    }
+
+    /// <summary>Waits for a background loop to end at stop; a failure of <paramref name="what"/> is logged, not thrown.</summary>
+    private static async Task EndAsync(Task? loop, string what)
+    {
+        if (loop is null) return;
+        try
+        {
+            await loop.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopped.
+        }
+#pragma warning disable CA1031 // Stopping must finish whatever the SimBrief side threw: it is logged, then the rest is disposed.
+        catch (Exception ex) when (what.Length > 0)
+#pragma warning restore CA1031
+        {
+            Log.Warning($"{what} failed while streaming stopped ({ex.GetType().Name}: {ex.Message}); stopping carries on");
+        }
     }
 
     /// <summary>"Extra (level +1)": the quality in the words of the window.</summary>

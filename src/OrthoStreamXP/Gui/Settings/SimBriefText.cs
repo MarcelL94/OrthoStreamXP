@@ -6,7 +6,7 @@ namespace OrthoStreamXP.Gui;
 /// </summary>
 internal static class SimBriefText
 {
-    /// <summary>What the download limit (<c>simbrief-max-mb</c>) does, in one line.</summary>
+    /// <summary>What the download limit (<c>simbrief-download-limit</c>) does, in one line.</summary>
     public const string LimitHelp =
         "The most the prefetch may download per session. Beyond it, scenery loads as usual while you fly.";
 
@@ -26,7 +26,7 @@ internal static class SimBriefText
         [
             new("300 MB: a metered or mobile connection", "300"),
             new("500 MB: a slow connection", "500"),
-            new($"{MountSettings.DefaultSimBriefMaxMb} MB: a typical flight (recommended)", MountSettings.DefaultSimBriefMaxMb.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            new($"{MountSettings.DefaultSimBriefDownloadLimitMb} MB: a typical flight (recommended)", MountSettings.DefaultSimBriefDownloadLimitMb.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             new("3000 MB: Extra quality, or the alternate airport on", "3000"),
             new("No limit (not recommended)", "0"),
         ];

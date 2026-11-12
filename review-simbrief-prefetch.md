@@ -9,6 +9,8 @@ is unchanged up to `e59478f` (later commits only touch `CLAUDE.md` and this file
   `TextureStreamer` internals the new code relies on. Round 1's findings are kept, re-checked and re-ranked below.
 - **Flight** (2026-11-11): the EDDV → ENGM flight of 2026-11-10 merged in (F1-F10, section "Real flight EDDV → ENGM").
 - **Maintainer answer** (2026-11-11): his requirements for the upstream PR, R1-R12 (section right after "Overall").
+- **Maintainer notes on draft PR #30** (2026-11-12): R6 answered, open questions, 4 commits; plan in section
+  "Plan after the maintainer's notes on #30".
 
 Context: a feature proposal has been posted upstream (flysimdev/OrthoStreamXP). It describes this branch as work in
 progress and asks whether to send one PR or several. This file is the to-do list until that PR.
@@ -73,6 +75,110 @@ SimBrief on. In the log:
 - The PR branch (Branch plan), when the user says so.
 - Not covered on purpose: the whole-texture fallback without mip streaming has no budget and no takeoff drop.
 - The PDF user guide needs a rebuild (pandoc) once the docs are final.
+
+## Plan after the maintainer's notes on #30 (2026-11-12)
+
+A and B done on this WIP branch 2026-11-12 (not committed yet), 455 tests green, RC 13 (`1.3.12-rc.13`, `-NoUpdates`) built for Sunday. Port (C) still open.
+
+### What the maintainer said
+
+- **R6 answered:** (1) texture order around a point: use `PrefetchPlanner.Select` with `motion: null` (circle, nearest
+  first) and drop the warmer's own placement code. (2) Yes to ground speed and on-ground: add `groundspeed` and
+  `onground_any` to the datarefs in `XPlaneUdp`; `AircraftReport` already has `GroundSpeedKt`. (3) Moving
+  `TilesAround` and the TERT reader next to `SceneryLoads` is fine, as **its own first commit, no behaviour change**:
+  four commits instead of three.
+- **Wants to see:** cold-cache numbers (queue size, builds still running at the takeoff roll), most important before
+  merging; whether the memory give-back touches the shared buffer pool (R1) and what a build right after it does; how the
+  trim knows an area was not flown, and whether flying it later clears that; that cached tiles don't count against the
+  download budget; the setting name in the schema's style; one User-Agent in `TileSource`, `ConnectionTest` and
+  `PackagesViewModel`; username/Pilot ID kept out of flight reports and any screen copied into a bug report; a control
+  flight with prefetch off, same route and cache state.
+- **Draft PR:** "open it now", target `develop`, CI must pass (warnings are errors).
+
+### What the code says (checked 2026-11-12)
+
+| Question | Finding |
+|---|---|
+| Draft PR | Already open: #30 into `develop` since 2026-11-11 21:02. Reply with the link |
+| CI | Never ran: the run is `action_required` (fork PR from a first-time contributor). The maintainer must approve the workflow |
+| Memory give-back (R1) | **Not pre-warm only.** `PrewarmMemory.GiveBack` is one blocking, compacting full GC for the whole process: every thread stops (the WinFsp threads serving X-Plane's reads too), the streamer's ~1 GB of live texture arrays are moved, and a build right after it gets fresh memory from Windows. The pause is logged but not measured in flight. Not checked yet: whether an aggressive GC also trims `ArrayPool<byte>.Shared` (used by `TextureBuilder` and `Dds`). So: yes, R1 |
+| "Pre-warmed, never flown" | Not by file writes: `CacheAreas.Trim` orders by `AreaUsage` (`area-usage.json`, already on develop), noted when X-Plane opens a texture of an area (`SceneryFileSystem.cs:137/162`). Prefetch builds never note. No entry: trimmed first; then oldest first. Flying there later notes it, so it becomes an ordinary area. Catches: whole 1° area granularity; areas cached before `AreaUsage` existed (2026-11-07) or with a lost json also count as never flown |
+| Download budget | Real downloads only: `PrefetchBudget.Spend` gets `stats.Bytes`, which grows only after an HTTP fetch (`TileSource.cs:348`). Disk/RAM cache hits and joined in-flight downloads cost nothing; fully cached textures are skipped before queuing. Catch: builds running when the limit is hit finish, so it can go a little over |
+| Setting name | Others spell the unit out (`-km`, `-seconds`) or have none (`cache-limit`, `build-memory`); no `-mb`. Proposal: `simbrief-download-limit` (MB). Never released, so no migration |
+| User-Agent | Already done in PR commit 1: all four (`TileSource`, `ConnectionTest`, `PackagesViewModel`, `SimBriefClient`) use `HttpIdentity.UserAgent`. Confirm only |
+| Username / Pilot ID | **Shown in the Setup summary** (`SetupViewModel.cs:341`, "SimBrief: <user> (...)"): make it "on". Not in flight reports or history; the connection test shows the plan, not the user. It is in `orthostreamxp.ini`, which people attach to bug reports: say so in the docs |
+| `Select` around a point | Fits departure, arrival and alternate (order from `Select`, level from `PagingModel.MipFor`). Not the climb: its distance is to the nearest point on a line. Keep the climb's own ordering and say why |
+| "Move" commit | `SceneryArea.TilesAround` and `DsfTerrain` are new in this PR, not on develop. Commit 1 can only *add* them at their final place next to `SceneryLoads`, with tests, nothing calling them yet. Tell the maintainer |
+
+### Work, in order
+
+**A. R6 (first: the maintainer wants to review it early)**
+
+1. [x] `TilesAround` and `DsfTerrain` to `Scenery/Aircraft/` next to `SceneryLoads`, with their tests.
+2. [x] `XPlaneUdp`: subscribe `sim/flightmodel/position/groundspeed` (m/s) and `sim/flightmodel/failures/onground_any`.
+   `AircraftReport.GroundSpeedKt` from X-Plane, falling back to today's position-derived speed when not received; add
+   `OnGround`. Note in the PR: Home's speed and the flight-report samples change too (every user, not only SimBrief).
+3. [x] `GroundWatch` uses `OnGround` and the real ground speed; camera height and camera speed go (fixes M4, outside views).
+4. [x] Departure, arrival, alternate: order from `PrefetchPlanner.Select(motion: null)` (radius covering the 3 × 4
+   tiles, no texture cap), level from `PagingModel.MipFor`; remove that placement code from `MipWarmer.PrefetchPlaced`.
+   The climb keeps its own ordering.
+5. [x] Tests: dataref parsing, `GroundWatch` with on-ground/speed sequences, `Select` around a point over the 3 × 4 tiles.
+
+**B. Fixes from the notes**
+
+6. [x] Rename `simbrief-max-mb` to `simbrief-download-limit` (schema, ini template, Settings/Setup, docs, tests).
+7. [x] Setup summary shows "on", not the username. Test: the username appears in no log line, report or summary text.
+   Docs: the ini holds it, remove it before attaching the ini to a bug report.
+8. [x] Memory give-back: only when no build is running and X-Plane read nothing for ~10 s. Log the pause and the first
+   builds after it; check `ArrayPool.Shared` after it. If the flight shows a pause X-Plane notices, drop the give-back
+   and say so in the PR.
+9. [x] Tests: "pre-warmed, later flown, then trimmed by normal age" and "cache hit spends no budget".
+
+**B2. From the maintainer's comment on #30 (2026-11-11 21:53), done 2026-11-12**
+
+- [x] `SimBriefClient.Parse`: every unexpected shape is "could not be read" (ValueKind checks, net for
+  `InvalidOperationException`/`FormatException`); `SimBriefSession` turns a throwing fetch into "no plan"; `StopAsync`
+  logs a failure of `WhenDone()` and carries on (listener and packages disposed).
+- [x] H1 for the departure: `AddOrOutrank` ranks load-ahead/flight path > departure > ground for every SimBrief phase;
+  tests both ways (X-Plane loads while the departure waits; Reload over loaded textures).
+- [x] Without mip streaming: documented (docs/simbrief.md + a start log line): departure only, bounded by the
+  background queue (4 x dds-build-workers), not in the budget/summary, not dropped on the roll.
+- Order of `PrefetchAround`: `Select(motion: null)`, order value kept in metres (same scale as load-ahead's own requests
+  of the same priority; an index would have put every departure request ahead of them).
+- Budget finding: the tile store keeps only the base tiles; full-detail tiles are downloaded again by a later build. A
+  cached base tile makes the texture "had" (nothing queued, nothing spent). Say so instead of "RAM cache hits".
+- Memory give-back: waits for 10 s without reads or builds (gives up after 10 min, or on new pre-warm work), logs the
+  thread pause (`GC.GetTotalPauseDuration`) and the working set 60 s later. `ArrayPool.Shared` not checked separately.
+- Still open for the port: the two load-ahead changes as their own commit (maintainer's ask), so 5 commits.
+
+**C. Port to the PR branch, 4 commits**
+
+1. Add the 3 × 4 rule and the DSF TERT reader next to `SceneryLoads`.
+2. Settings, Setup step, OFP fetch/parse, departure prefetch.
+3. Gate pre-warm, the new datarefs, takeoff drop, Reload button.
+4. The alternate.
+
+Fold in the pending WIP fixes (`78e7bbb`, `0bcf688`, `702de43`). Build (0 warnings) and test after every commit,
+`--force-with-lease`, update the PR text (4 commits, R6 done, the answers above).
+
+**D. Flights (Sunday 2026-11-15)**
+
+10. [ ] **Cold cache:** a new empty `cache` folder, an airport not flown yet; take off *before* the pre-warm is done
+    (worst case). Record: largest queue and pass time, builds still running at the roll (and the pre-warm's share),
+    requests dropped, waits during takeoff and climb, give-back pause, working set.
+11. [ ] **Control:** same route, again a new empty `cache` folder, prefetch off with the Home switch, same `paging-k`,
+    same time and weather. The tile servers' own caches may be warm from the first run: alternate the order or say so.
+12. [ ] 1-2 more flights in other regions (checks the 3 × 4 rule away from EDDV). Then the numbers table, the default
+    limit, and whether the alternate stays.
+
+**E. Reply on #30:** the PR link, ask to approve CI, the answers above, the 4-commit structure.
+
+### Decisions for the user
+
+1. **Unfreeze the PR branch?** The rule is "don't touch it until finished"; the maintainer wants R6 early.
+   Recommended: port A (and what is done of B) as one rewrite now, the numbers after Sunday.
+2. **Climb ordering:** keep it and explain, or try `Select` once per climb sample?
+3. **Setting name:** `simbrief-download-limit` (MB), or another?
 
 ## Start here: instructions for the coding session
 
@@ -155,7 +261,7 @@ Never claim a test passed without running it.
 15. [x] **Alternate behind its own switch** (default off), as the maintainer asked (PR structure step 3). F5 backs it.
         `simbrief-alternate = on|off` (default off), in the schema, setting names and example ini. Not on the Settings page
         yet (ini only, like the radius); say so in D3.
-16. [ ] **M4**: not seen in flight (F7). Only if R6 is agreed: use real ground speed or on-ground data instead of the
+16. [x] **M4** (done 2026-11-12 with R6: X-Plane's groundspeed and onground_any): not seen in flight (F7). Only if R6 is agreed: use real ground speed or on-ground data instead of the
         camera's motion.
         Deferred: waits for the maintainer's answer on R6 ("Stop and ask").
 17. [x] **Minor items** L1-L5, L8-L12 where cheap.

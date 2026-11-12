@@ -78,9 +78,9 @@ internal sealed class SetupViewModel : ObservableObject
         IsRerun = existing.Get("cache") is not null;
         _simBriefUser = existing.Get("simbrief-user") ?? "";
         SimBriefTest = new SimBriefTestViewModel(_main.MeshHttp, () => SimBriefUser);
-        int? limit = existing.GetInt("simbrief-max-mb");
+        int? limit = existing.GetInt("simbrief-download-limit");
         SimBriefLimits = SimBriefText.LimitChoices(limit);
-        string chosen = (limit ?? MountSettings.DefaultSimBriefMaxMb).ToString(CultureInfo.InvariantCulture);
+        string chosen = (limit ?? MountSettings.DefaultSimBriefDownloadLimitMb).ToString(CultureInfo.InvariantCulture);
         _simBriefLimit = SimBriefLimits.First(c => c.Value == chosen);
         _simBriefAlternate = existing.GetBool("simbrief-alternate") == true;
         ConnectionTest = new ConnectionTestViewModel(
@@ -308,7 +308,7 @@ internal sealed class SetupViewModel : ObservableObject
     /// <summary>The SimBrief step's download limits; a value set by hand in the file is one of them.</summary>
     public IReadOnlyList<Choice> SimBriefLimits { get; }
 
-    /// <summary>The most the SimBrief prefetch may download per session (<c>simbrief-max-mb</c>).</summary>
+    /// <summary>The most the SimBrief prefetch may download per session (<c>simbrief-download-limit</c>).</summary>
     public Choice SimBriefLimit
     {
         get => _simBriefLimit;
@@ -338,7 +338,7 @@ internal sealed class SetupViewModel : ObservableObject
     public string Summary =>
         $"X-Plane: {_xplane}\nScenery packages: {string.Join(", ", SystemCheck.PackagesIn(_packages))} in {_packages}\n" +
         $"Quality: {Preset.Name}\nCache: {CacheFolder}\n" +
-        $"SimBrief: {(SimBriefUser.Length > 0 ? $"{SimBriefUser} (your flight's scenery is built ahead, {LimitShort}{(SimBriefAlternate ? ", with the alternate" : "")})" : "not used")}";
+        $"SimBrief: {(SimBriefUser.Length > 0 ? $"on (your flight's scenery is built ahead, {LimitShort}{(SimBriefAlternate ? ", with the alternate" : "")})" : "not used")}";
 
     private string LimitShort => SimBriefLimit.Value == "0" ? "no download limit" : $"up to {SimBriefLimit.Value} MB per session";
 
@@ -432,8 +432,8 @@ internal sealed class SetupViewModel : ObservableObject
             if (_testedWorkers is { } workers) settings.Set("download-workers", workers);
             settings.Set("simbrief-user", SimBriefUser.Length > 0 ? SimBriefUser : null);
             // Defaults stay out of the file, so a later default applies.
-            bool defaultLimit = SimBriefLimit.Value == MountSettings.DefaultSimBriefMaxMb.ToString(CultureInfo.InvariantCulture);
-            settings.Set("simbrief-max-mb", defaultLimit ? null : SimBriefLimit.Value);
+            bool defaultLimit = SimBriefLimit.Value == MountSettings.DefaultSimBriefDownloadLimitMb.ToString(CultureInfo.InvariantCulture);
+            settings.Set("simbrief-download-limit", defaultLimit ? null : SimBriefLimit.Value);
             settings.Set("simbrief-alternate", SimBriefAlternate ? "on" : null);
             Directory.CreateDirectory(CacheFolder);
             settings.Save();

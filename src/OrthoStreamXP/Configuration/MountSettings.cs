@@ -73,7 +73,7 @@ internal sealed record MountSettings
     /// <summary>How far around the SimBrief departure textures are prefetched.</summary>
     public double SimBriefRadiusKm { get; init; } = DefaultSimBriefRadiusKm;
     /// <summary>The most the SimBrief prefetch may download in a session, in MB; 0: no limit.</summary>
-    public int SimBriefMaxMb { get; init; } = DefaultSimBriefMaxMb;
+    public int SimBriefDownloadLimitMb { get; init; } = DefaultSimBriefDownloadLimitMb;
     /// <summary>The ground pre-warm builds the alternate's scenery too (rarely flown: off unless chosen).</summary>
     public bool SimBriefAlternate { get; init; }
 
@@ -81,7 +81,7 @@ internal sealed record MountSettings
     public const double DefaultNearWait = 60, DefaultMaxWait = 6, DefaultLookaheadSeconds = 120;
     public const int DefaultBuildMemoryMb = 512;
     public const double DefaultSimBriefRadiusKm = 10;
-    public const int DefaultSimBriefMaxMb = 1000;
+    public const int DefaultSimBriefDownloadLimitMb = 1000;
 
     /// <summary>Reads and checks the mount options; a mistake is a <see cref="SettingsException"/> in plain words.</summary>
     /// <param name="console">False for the window: the log never goes to a console there.</param>
@@ -154,10 +154,10 @@ internal sealed record MountSettings
         string? simBriefUser = values.String("simbrief-user")?.Trim() is { Length: > 0 } user ? user : null;
         double simBriefRadiusKm = values.Double("simbrief-radius-km", DefaultSimBriefRadiusKm);
         if (simBriefRadiusKm is < 1 or > 50) throw new SettingsException("simbrief-radius-km must be between 1 and 50");
-        int simBriefMaxMb = values.Int("simbrief-max-mb", DefaultSimBriefMaxMb);
+        int simBriefDownloadLimitMb = values.Int("simbrief-download-limit", DefaultSimBriefDownloadLimitMb);
         string alternateValue = values.String("simbrief-alternate") ?? "off";
         bool simBriefAlternate = ParseOnOff(alternateValue) ?? throw new SettingsException($"simbrief-alternate must be on or off, not '{alternateValue}'");
-        if (simBriefMaxMb is < 0 or > 100_000) throw new SettingsException("simbrief-max-mb must be between 0 (no limit) and 100000");
+        if (simBriefDownloadLimitMb is < 0 or > 100_000) throw new SettingsException("simbrief-download-limit must be between 0 (no limit) and 100000");
 
         if (downloadWorkers < 1) throw new SettingsException("download-workers must be at least 1");
         if (downloadTimeout is < 1 or > 120) throw new SettingsException("download-timeout must be between 1 and 120 seconds");
@@ -226,7 +226,7 @@ internal sealed record MountSettings
             LogDetail = logDetail,
             SimBriefUser = simBriefUser,
             SimBriefRadiusKm = simBriefRadiusKm,
-            SimBriefMaxMb = simBriefMaxMb,
+            SimBriefDownloadLimitMb = simBriefDownloadLimitMb,
             SimBriefAlternate = simBriefAlternate,
         };
     }

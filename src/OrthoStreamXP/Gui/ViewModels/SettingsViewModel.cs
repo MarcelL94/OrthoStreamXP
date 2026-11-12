@@ -74,7 +74,7 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
         };
         SimBrief =
         [
-            Field("simbrief-max-mb", "Download limit per session",
+            Field("simbrief-download-limit", "Download limit per session",
                 SimBriefText.LimitHelp + " Enter the MB, from 0 (no limit) to 100000.",
                 FieldKind.Number, min: 0, max: 100_000),
             Field("simbrief-alternate", "Also build the alternate airport", SimBriefText.AlternateHelp,
@@ -571,7 +571,7 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
     private static string Default(string key) => key switch
     {
         "scenery-packs" => "on",
-        "simbrief-max-mb" => MountSettings.DefaultSimBriefMaxMb.ToString(CultureInfo.InvariantCulture),
+        "simbrief-download-limit" => MountSettings.DefaultSimBriefDownloadLimitMb.ToString(CultureInfo.InvariantCulture),
         "simbrief-alternate" => "off",
         _ => "",
     };
