@@ -4,7 +4,7 @@ using OrthoStreamXP.Scenery;
 
 namespace OrthoStreamXP.Tests;
 
-/// <summary>The scenery X-Plane loads around a place: its DSF tiles, and the terrain their TERT tables name.</summary>
+/// <summary>The scenery X-Plane loads around a departure: its DSF tiles, and the textures their TERT tables name.</summary>
 public sealed class SceneryAreaTests : IDisposable
 {
     private readonly TempTree _tree = new();
@@ -59,5 +59,21 @@ public sealed class SceneryAreaTests : IDisposable
     {
         Assert.Equal(Path.Join("pkg", "Earth nav data", "+50+000", "+52+009.dsf"), DsfTerrain.PathIn("pkg", 52, 9));
         Assert.Equal(Path.Join("pkg", "Earth nav data", "-40-060", "-34-059.dsf"), DsfTerrain.PathIn("pkg", -34, -59));
+    }
+
+    [Fact]
+    public void Lists_each_texture_of_the_tiles_the_package_has_once()
+    {
+        string package = _tree.PathOf("pkg");
+        _tree.WriteBytes("pkg/Earth nav data/+50+000/+52+009.dsf",
+            Dsf("terrain_Water", "terrain/21552_34576_BI16.ter", "terrain/21552_34576_BI16_water_overlay.ter", "terrain/21584_34464_BI18.ter"));
+        _tree.WriteBytes("pkg/Earth nav data/+50+010/+52+010.dsf", Dsf("terrain/21552_34576_BI16.ter", "terrain/21600_34608_BI16.ter"));
+
+        IReadOnlyList<VirtualPath> textures = SceneryArea.Textures(package, 52.46, 9.68, out int tiles);
+
+        Assert.Equal(2, tiles);
+        Assert.Equal(["21552_34576_BI16.dds", "21584_34464_BI18.dds", "21600_34608_BI16.dds"], textures.Select(t => t.Name));
+        Assert.Empty(SceneryArea.Textures(_tree.PathOf("none"), 52.46, 9.68, out int none));
+        Assert.Equal(0, none);
     }
 }

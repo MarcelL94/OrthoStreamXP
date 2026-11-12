@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using OrthoStreamXP.Textures;
+using OrthoStreamXP.Setup;
 
 namespace OrthoStreamXP.Scenery;
 
@@ -46,10 +47,22 @@ internal sealed class MipWarmer : IDisposable
     private static readonly TimeSpan LoadingReportInterval = TimeSpan.FromSeconds(10), QuietReportInterval = TimeSpan.FromMinutes(2);
 
     /// <summary>
-    /// A texture to warm; <paramref name="Mip"/> and <paramref name="Priority"/> fixed for the flight-path prefetch.
-    /// <paramref name="Recheck"/>: queued again because the aircraft moved, not because X-Plane loaded it.
+    /// A texture to warm; <paramref name="Mip"/> and <paramref name="Priority"/> fixed for the flight-path and departure
+    /// prefetch. <paramref name="Recheck"/>: queued again because the aircraft moved, not because X-Plane loaded it.
+    /// <paramref name="Distance"/>: the order among the prefetch's own requests (from the departure, or along the route).
+    /// <paramref name="Meter"/>: the SimBrief phase that queued it (see <see cref="PrefetchMeter"/>); null for every
+    /// other request.
     /// </summary>
-    private readonly record struct Request(VirtualPath Texture, int? Mip = null, int? Priority = null, bool Recheck = false);
+    private readonly record struct Request(VirtualPath Texture, int? Mip = null, int? Priority = null, bool Recheck = false, double? Distance = null,
+        PrefetchMeter? Meter = null);
+
+    /// <summary>The SimBrief prefetch's phases: the departure.</summary>
+    private readonly PrefetchMeter[] _phases = [new("departure")];
+    /// <summary>The SimBrief prefetch queued something: X-Plane's loads are checked against it (the hit rate).</summary>
+    private volatile bool _prefetched;
+    private PrefetchBudget? _budget;
+    /// <summary>The budget ran out and this package's SimBrief requests were dropped (once).</summary>
+    private bool _budgetSpent;
 
     private readonly TextureCatalog _catalog;
     private readonly TextureStreamer _streamer;
@@ -96,20 +109,35 @@ internal sealed class MipWarmer : IDisposable
                      $"({_heavyLimit} detailed textures, {SmallInFlight} of a few tiles and {BaseInFlight} base tiles at a time)");
     }
 
-    private void OnEntryAdded(TextureCatalog.Entry entry) => Add(new Request(entry.Texture));
+    private void OnEntryAdded(TextureCatalog.Entry entry)
+    {
+        if (_prefetched)
+            foreach (PrefetchMeter meter in _phases) meter.NoteLoaded(entry.Texture);
+        Add(new Request(entry.Texture));
+    }
+
+    /// <summary>The SimBrief prefetch spends from <paramref name="budget"/> (shared by every package); set before it queues anything.</summary>
+    public void UseBudget(PrefetchBudget budget)
+    {
+        _budget = budget;
+        foreach (PrefetchMeter meter in _phases) meter.Budget = budget;
+    }
+
+    /// <summary>The SimBrief prefetch's phases this session, in their order.</summary>
+    public IReadOnlyList<PrefetchMeter> Phases => _phases;
 
     /// <summary>A new position: what every loaded texture will need has changed.</summary>
     private void OnMoved(CameraReport camera)
     {
         lock (_gate)
             foreach (TextureCatalog.Entry entry in _catalog.Entries)
-                _waiting.TryAdd(entry.Texture.Key, new Request(entry.Texture, Recheck: true));
+                AddOrOutrank(new Request(entry.Texture, Recheck: true));
         Wake();
     }
 
     /// <summary>
-    /// The flight-path prefetch: whole textures along the predicted path. Returns how many were queued. Each gets its
-    /// base tile first (see <see cref="Target"/>).
+    /// The flight-path prefetch (and the SimBrief departure without streaming's levels): whole textures ahead of
+    /// X-Plane. Returns how many were queued. Each gets its base tile first (see <see cref="Target"/>).
     /// </summary>
     public int Prefetch(IReadOnlyList<VirtualPath> textures)
     {
@@ -120,19 +148,87 @@ internal sealed class MipWarmer : IDisposable
         return textures.Count;
     }
 
-    private void Add(Request request)
+    /// <summary>
+    /// The SimBrief departure: every texture of the scenery X-Plane loads around the departure, each to the level X-Plane
+    /// will want with the aircraft there (full detail beside it, the middle levels further out, a base tile far away),
+    /// the same choice load-ahead makes once X-Plane sends a position, only made before X-Plane opens anything. The
+    /// order is load-ahead's around a point: <see cref="PrefetchPlanner.Select"/> without motion, nearest first.
+    /// Returns how many were queued and how many had what they need already.
+    /// </summary>
+    public (int Queued, int Had) PrefetchAround(IReadOnlyList<VirtualPath> textures, double lat, double lon)
     {
-        lock (_gate) _waiting.TryAdd(request.Texture.Key, request);
-        Wake();
+        var entries = new List<TextureCatalog.Entry>(textures.Count);
+        foreach (VirtualPath texture in textures)
+            if (_streamer.Get(texture) is { } t) entries.Add(new TextureCatalog.Entry(texture, t.Lat, t.Lon));
+        IReadOnlyList<VirtualPath> nearestFirst = PrefetchPlanner.Select(entries, lat, lon, motion: null, AroundRadiusKm, lookaheadSeconds: 0, int.MaxValue);
+        // The order is the distance in metres, as load-ahead's own requests are ranked by: Select's order, on the same scale.
+        var placed = new List<(VirtualPath Texture, double DistanceM, double Order)>(nearestFirst.Count);
+        foreach (VirtualPath texture in nearestFirst)
+            if (_streamer.Get(texture) is { } t)
+            {
+                double distance = Geo.DistanceM(lat, lon, t.Lat, t.Lon);
+                placed.Add((texture, distance, distance));
+            }
+        return PrefetchPlaced(placed);
     }
 
-    /// <summary>The level and priority the request waiting for <paramref name="texture"/> fetches now; null when none waits.</summary>
-    internal (int Mip, int Priority)? WaitingFor(VirtualPath texture)
+    /// <summary>
+    /// The radius <see cref="PrefetchAround"/> selects in: wider than the 3 x 4 DSF tiles X-Plane loads round a place
+    /// (<see cref="SceneryLoads.TilesAround"/>) reach from it anywhere, so the tiles alone decide what is queued.
+    /// </summary>
+    internal const double AroundRadiusKm = 500;
+
+    private int Drop(Func<Request, bool> which)
     {
-        Request request;
+        int dropped = 0;
         lock (_gate)
-            if (!_waiting.TryGetValue(texture.Key, out request)) return null;
-        return Target(request.Texture, request.Mip, request.Priority) is { } t ? (t.Mip, t.Priority) : null;
+            foreach (var (key, request) in _waiting)
+                if (which(request))
+                {
+                    _waiting.Remove(key); // allowed while enumerating a Dictionary
+                    dropped++;
+                }
+        Wake();
+        return dropped;
+    }
+
+    /// <summary>
+    /// Queues the SimBrief prefetch's textures, each placed by the distance X-Plane will see it from (its level) and its
+    /// order among them. It gives way to what load-ahead and the flight path want (<see cref="AddOrOutrank"/>).
+    /// </summary>
+    private (int Queued, int Had) PrefetchPlaced(List<(VirtualPath Texture, double DistanceM, double Order)> placed)
+    {
+        var requests = new List<Request>(placed.Count);
+        int had = 0;
+        PrefetchMeter meter = _phases[0];
+        if (_budget is { Exhausted: true }) return (0, 0); // spent: left to load-ahead
+        foreach (var (texture, distance, order) in placed)
+        {
+            if (_streamer.Get(texture) is not { } t) continue;
+            int wanted = _streamer.Model.MipFor(distance, t.SizeM, t.Layout.Size);
+            int mip = Math.Min(wanted, Coarsest(t));
+            int real = _streamer.RealFrom(t);
+            if (real <= mip)
+            {
+                had++;
+                meter.NoteHad();
+                continue;
+            }
+            // Far ones are only their base tile: before the middle levels, as X-Plane reads far scenery first. Nothing of
+            // the departure is more urgent than Warm: near the gate it is still a guess, and it must not hold up what
+            // X-Plane really asks for or load-ahead next to the camera.
+            int priority = mip >= Coarsest(t) ? FetchPriority.Warm
+                : Math.Max(FetchPriority.Warm, PriorityOf(t, wanted));
+            requests.Add(new Request(texture, mip, priority, Distance: order, Meter: meter));
+        }
+        var queued = new List<VirtualPath>(requests.Count);
+        lock (_gate)
+            foreach (Request request in requests)
+                if (AddOrOutrank(request)) queued.Add(request.Texture);
+        foreach (VirtualPath texture in queued) meter.NoteQueued(texture); // off the gate: X-Plane's loads wait on it
+        if (queued.Count > 0) _prefetched = true;
+        Wake();
+        return (queued.Count, had);
     }
 
     /// <summary>
@@ -142,26 +238,62 @@ internal sealed class MipWarmer : IDisposable
     /// </summary>
     private static int Coarsest(StreamedTexture t) => Math.Min(t.BaseMip, ReadPattern.CoarsestRead(t.Layout));
 
+    /// <summary>A load-ahead build's priority by the band X-Plane will read the texture in.</summary>
+    private static int PriorityOf(StreamedTexture t, int wanted) => TextureStreamer.BandOf(t, wanted) switch
+    {
+        Band.Near => FetchPriority.NearWarm,
+        Band.Middle => FetchPriority.Warm + wanted,
+        _ => FetchPriority.Background,
+    };
+
+    private void Add(Request request)
+    {
+        lock (_gate) AddOrOutrank(request);
+        Wake();
+    }
+
+    /// <summary>
+    /// Queues <paramref name="request"/> unless the texture waits for load-ahead or the flight path already. A waiting
+    /// SimBrief departure request gives way to every request: its level is a guess made at the gate, and overwriting a
+    /// waiting load-ahead request with it would leave a texture X-Plane loaded with that guess (H1). Under the gate.
+    /// </summary>
+    private bool AddOrOutrank(Request request)
+    {
+        if (_waiting.TryGetValue(request.Texture.Key, out Request existing) && existing.Meter is null) return false;
+        _waiting[request.Texture.Key] = request;
+        return true;
+    }
+
+    /// <summary>The level and priority the request waiting for <paramref name="texture"/> fetches now; null when none waits.</summary>
+    internal (int Mip, int Priority, double Order)? WaitingFor(VirtualPath texture)
+    {
+        Request request;
+        lock (_gate)
+            if (!_waiting.TryGetValue(texture.Key, out request)) return null;
+        return Target(request.Texture, request.Mip, request.Priority, request.Distance) is { } t ? (t.Mip, t.Priority, t.Distance) : null;
+    }
+
     private void Wake()
     {
         if (_wake.CurrentCount == 0) _wake.Release();
     }
 
     /// <summary>The level to fetch and its priority, and the distance (for the order); null when it is not a photo texture.</summary>
-    internal (StreamedTexture Texture, int Mip, int Priority, double Distance)? Target(VirtualPath path, int? mip = null, int? priority = null)
+    internal (StreamedTexture Texture, int Mip, int Priority, double Distance)? Target(VirtualPath path, int? mip = null, int? priority = null,
+        double? departureDistance = null)
     {
         if (_streamer.Get(path) is not { } t) return null;
-        // A level asked for ahead (the flight path) on a texture with nothing yet: its base tile first, in the base
-        // tiles' own places and before the middle levels. Load-ahead gives every texture one, but skips a texture that
-        // is whole already: the low-zoom base there (far scenery, colour matching, the report's map) would stay empty.
-        // And a far texture X-Plane reads before its base tile arrives gets one flat colour.
+        // A level asked for ahead (flight path, departure) on a texture with nothing yet: its base tile first, in the
+        // base tiles' own places and before the middle levels. Load-ahead gives every texture one, but skips a texture
+        // that is whole already: the low-zoom base there (far scenery, colour matching, the report's map) would stay
+        // empty. And a far texture X-Plane reads before its base tile arrives gets one flat colour.
         if (mip is int asked && asked < t.BaseMip && _streamer.RealFrom(t) > t.BaseMip)
             return (t, t.BaseMip, Math.Min(priority ?? FetchPriority.Warm, FetchPriority.Warm),
-                _view.Current is { } at ? ViewTracker.DistanceM(at, t.Lat, t.Lon) : double.MaxValue);
+                departureDistance ?? (_view.Current is { } at ? ViewTracker.DistanceM(at, t.Lat, t.Lon) : double.MaxValue));
         if (_view.Current is not { } camera)
-            return (t, mip ?? Coarsest(t), priority ?? FetchPriority.Background, double.MaxValue);
+            return (t, mip ?? Coarsest(t), priority ?? FetchPriority.Background, departureDistance ?? double.MaxValue);
         double distance = ViewTracker.DistanceM(camera, t.Lat, t.Lon);
-        if (mip is int fixedMip) return (t, fixedMip, priority ?? FetchPriority.Warm, distance);
+        if (mip is int fixedMip) return (t, fixedMip, priority ?? FetchPriority.Warm, departureDistance ?? distance);
 
         double soon = distance;
         if (camera.Motion is { SpeedMps: >= PrefetchPlanner.MovingSpeedMps } motion)
@@ -172,13 +304,7 @@ internal sealed class MipWarmer : IDisposable
         }
         int wanted = _streamer.Model.MipFor(soon, t.SizeM, t.Layout.Size);
         int target = Math.Min(wanted, Coarsest(t));
-        int targetPriority = TextureStreamer.BandOf(t, wanted) switch
-        {
-            Band.Near => FetchPriority.NearWarm,
-            Band.Middle => FetchPriority.Warm + wanted,
-            _ => FetchPriority.Background,
-        };
-        return (t, target, targetPriority, distance);
+        return (t, target, PriorityOf(t, wanted), distance);
     }
 
     private async Task RunAsync()
@@ -202,11 +328,12 @@ internal sealed class MipWarmer : IDisposable
     /// <summary>Starts the most urgent waiting textures while there is room for them.</summary>
     internal void StartWhatFits()
     {
+        DropPrefetchOverBudget();
         Request[] waiting;
         lock (_gate) waiting = [.. _waiting.Values];
         if (waiting.Length == 0) return;
         var ranked = waiting
-            .Select(r => (Request: r, Target: Target(r.Texture, r.Mip, r.Priority)))
+            .Select(r => (Request: r, Target: Target(r.Texture, r.Mip, r.Priority, r.Distance)))
             .OrderBy(x => x.Target?.Priority ?? int.MaxValue).ThenBy(x => x.Target?.Distance ?? double.MaxValue);
         foreach (var (request, target) in ranked)
         {
@@ -225,7 +352,7 @@ internal sealed class MipWarmer : IDisposable
                 if (!request.Recheck) Interlocked.Increment(ref _alreadyHad);
                 continue;
             }
-            if (_streamer.Warm(request.Texture, t.Mip, t.Priority) is not { } build)
+            if (_streamer.Warm(request.Texture, t.Mip, t.Priority, request.Meter) is not { } build)
             {
                 Remove(request);
                 continue;
@@ -256,6 +383,17 @@ internal sealed class MipWarmer : IDisposable
     }
 
     private static bool Succeeded(Task<bool> build) => build.IsCompletedSuccessfully && build.Result;
+
+    /// <summary>Once the download budget is spent: the SimBrief requests still waiting go, and that is logged once.</summary>
+    private void DropPrefetchOverBudget()
+    {
+        if (_budgetSpent || _budget is not { Exhausted: true } budget) return;
+        _budgetSpent = true;
+        int dropped = Drop(static r => r.Meter is not null);
+        if (budget.FirstToReport())
+            Log.Info($"SimBrief prefetch: the download budget of {CacheInventory.FormatBytes(budget.LimitBytes)} is used up " +
+                     $"(simbrief-download-limit); {dropped} textures still waiting are left to load-ahead");
+    }
 
     private bool Full(BuildKind kind) => Volatile.Read(ref _running[(int)kind]) >= kind switch
     {
