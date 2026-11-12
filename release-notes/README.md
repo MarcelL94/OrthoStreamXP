@@ -4,6 +4,9 @@ One Markdown file per release, named after its tag: `v1.2.0.md` for the tag `v1.
 
 When the tag is pushed, the [release workflow](../.github/workflows/release.yml) puts the file's text at the top of
 the GitHub Release. GitHub's generated list of changes (merged pull requests, new contributors) follows it.
+`build-installer.ps1` also packs the file into the update feed: the app shows it in its update window before
+installing (headings, bullets, paragraphs and **bold**; links show their text only). For an update packed without
+notes, the app reads them from the GitHub Release instead, up to GitHub's generated "What's Changed" list.
 
 ## Releasing
 
