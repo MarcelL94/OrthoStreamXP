@@ -497,6 +497,37 @@ public sealed class NightLightsTests : IDisposable
         Assert.Equal(DaylightPhase.Day, daylight.Phase);
     }
 
+    [Fact]
+    public void It_is_dark_for_the_photos_only_well_past_civil_twilight_and_a_sun_on_the_line_changes_nothing()
+    {
+        var daylight = new Daylight();
+        Assert.False(daylight.Dark); // nothing from X-Plane yet
+        daylight.Offer(-7);
+        Assert.Equal((DaylightPhase.Night, false), (daylight.Phase!.Value, daylight.Dark)); // night for the lights, not dark for the photos
+        daylight.Offer(-9.2);
+        Assert.False(daylight.Dark); // on the line: not yet
+        daylight.Offer(-9.6);
+        Assert.True(daylight.Dark);
+        daylight.Offer(-8.8);
+        Assert.True(daylight.Dark); // dawn, but on the line
+        daylight.Offer(-8.4);
+        Assert.False(daylight.Dark);
+        daylight.Offer(-30); // time moved in X-Plane's menu
+        Assert.True(daylight.Dark);
+        daylight.Offer(double.NaN);
+        Assert.True(daylight.Dark);
+    }
+
+    [Fact]
+    public void How_dark_it_must_be_for_the_photos_can_be_set()
+    {
+        var daylight = new Daylight(-12);
+        daylight.Offer(-11);
+        Assert.False(daylight.Dark);
+        daylight.Offer(-12.6);
+        Assert.True(daylight.Dark);
+    }
+
     // --- The setting -----------------------------------------------------------------------------------------------
 
     [Fact]
@@ -509,5 +540,21 @@ public sealed class NightLightsTests : IDisposable
         Assert.True(Parse("night-lights = on").NightLights);
         Assert.False(Parse("night-lights = off").NightLights);
         Assert.Throws<SettingsException>(() => Parse("night-lights = bright"));
+    }
+
+    [Fact]
+    public void The_photos_stream_at_night_unless_skipped_whatever_the_night_lights()
+    {
+        Directory.CreateDirectory(_tree.PathOf("source"));
+        MountSettings Parse(params string[] extra) => MountSettings.FromValues(TestSettings.Of(
+            [$"source = {_tree.PathOf("source")}", $"cache = {_tree.PathOf("cache")}", $"mountpoint = {_tree.PathOf("mount")}", .. extra]));
+        Assert.False(Parse().SkipPhotosAtNight);
+        Assert.True(Parse("skip-photos-at-night = on").SkipPhotosAtNight);
+        Assert.Equal((true, false), (Parse("skip-photos-at-night = on", "night-lights = off") is var s ? (s.SkipPhotosAtNight, s.NightLights) : default));
+        Assert.Throws<SettingsException>(() => Parse("skip-photos-at-night = sometimes"));
+        Assert.Equal(9, Parse().SkipPhotosSunBelow);
+        Assert.Equal(12, Parse("skip-photos-sun-below = 12").SkipPhotosSunBelow);
+        Assert.Throws<SettingsException>(() => Parse("skip-photos-sun-below = 25"));
+        Assert.Throws<SettingsException>(() => Parse("skip-photos-sun-below = -3"));
     }
 }

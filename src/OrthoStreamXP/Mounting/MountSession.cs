@@ -16,6 +16,8 @@ internal sealed class MountSession : IDisposable
     private readonly List<PackageMount> _mounts = [];
     private readonly CancellationTokenSource _summaries = new();
     private readonly ViewTracker _view = new();
+    /// <summary>Where the sun is in X-Plane: offered by the position listener, read by the streaming to skip the photos at night.</summary>
+    private readonly Daylight _daylight;
     private readonly FlightRecorder _recorder = new();
     private readonly CpuMeter _cpu = new();
     private readonly SceneryLoads _loads;
@@ -37,6 +39,7 @@ internal sealed class MountSession : IDisposable
     {
         _settings = settings;
         _loads = new SceneryLoads(_view);
+        _daylight = new Daylight(-settings.SkipPhotosSunBelow);
     }
 
     public MountSettings Settings => _settings;
@@ -142,6 +145,7 @@ internal sealed class MountSession : IDisposable
             _ => $"Ground detail: {s.GroundDetail} %; X-Plane's grass and dirt decals are faded over the photos (the packages are not changed)",
         });
         NightPainting? nightPainting = s.NightLights ? StartNightLights(s) : null;
+        Daylight? nightPause = s.SkipPhotosAtNight ? SkipPhotosAtNight(s, streaming) : null;
 
         foreach (PackagePlan package in s.Packages)
         {
@@ -151,7 +155,7 @@ internal sealed class MountSession : IDisposable
                 Log.Info($"Removed {oldNights} night textures an earlier version kept whole; they are painted again, keeping only what X-Plane reads");
             roots.RenameToCacheNames();
             _mounts.Add(new PackageMount(package, roots, builder, textureOptions, s.TrackAircraft, s.LoadAhead, s.LazyTerrainListing, decals,
-                streaming ? new TextureStreamer(roots, builder!, _view, model, streamingOptions) : null, _view, _readLog, _seasons, _usage, _colours, _loads, exposure,
+                streaming ? new TextureStreamer(roots, builder!, _view, model, streamingOptions, nightPause) : null, _view, _readLog, _seasons, _usage, _colours, _loads, exposure,
                 nightPainting is null ? null : new NightTextures(package.Cache, s.Textures.SizeFor, nightPainting)));
             Log.Info($"Package {package.Name}: read-only from {package.Source}, cache overlay {package.Cache}, mounted at {package.Mountpoint}");
         }
@@ -171,7 +175,7 @@ internal sealed class MountSession : IDisposable
                     readLog?.Camera(camera);
                 },
                 streaming ? model.UseScreen : null,
-                seasons is null ? null : day => seasons.OfferDate(day, _view.Starting));
+                seasons is null ? null : day => seasons.OfferDate(day, _view.Starting), _daylight);
         }
 
         if (s.CustomScenery is not null && s.UpdateSceneryPacks)
@@ -294,6 +298,27 @@ internal sealed class MountSession : IDisposable
         else
             Log.Warning("Night lights: on, but no overlay package with X-Plane's roads was found (install a region on the Packages page); the photo tiles stay dark at night");
         return _nightPainting = new NightPainting(new NightPainter(roads), Math.Clamp(Environment.ProcessorCount / 4, 1, 4));
+    }
+
+    /// <summary>
+    /// The sun the streaming follows to skip the photos at night, or null when it cannot: the photos are built whole
+    /// without mip streaming, and without the aircraft's position X-Plane is never asked where the sun is.
+    /// </summary>
+    private Daylight? SkipPhotosAtNight(MountSettings s, bool streaming)
+    {
+        if (!streaming)
+        {
+            Log.Warning("Skip the photos at night needs mip streaming; the photos stream at night too in this run");
+            return null;
+        }
+        if (!s.TrackAircraft)
+        {
+            Log.Warning("Skip the photos at night needs the aircraft's position from X-Plane (track-aircraft); the photos stream at night too in this run");
+            return null;
+        }
+        Log.Step($"Skip the photos at night: on; while the sun in X-Plane is more than {s.SkipPhotosSunBelow:0.#}° below the horizon, " +
+                 "the ground is drawn from the low-zoom base and no detailed photos are downloaded");
+        return _daylight;
     }
 
     /// <summary>"Extra (level +1)": the quality in the words of the window.</summary>

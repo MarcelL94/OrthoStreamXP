@@ -7,7 +7,6 @@ internal static class SettingNames
     {
         ["level-change"] = "Quality",
         ["ground-detail"] = "Ground detail",
-        ["night-lights"] = "Night lights",
         ["xplane"] = "X-Plane folder",
         ["base-packages"] = "Scenery packages folder",
         ["source"] = "Scenery packages folder",
@@ -20,6 +19,9 @@ internal static class SettingNames
         ["season"] = "Seasons",
         ["season-strength"] = "Seasons",
         ["exposure"] = "Exposure",
+        ["night-lights"] = "Night lights",
+        ["skip-photos-at-night"] = "Photos at night",
+        ["skip-photos-sun-below"] = "Photos at night",
         ["scenery-packs"] = "Keep the photo scenery below airports",
         ["xplane-address"] = "X-Plane address",
         ["xplane-arguments"] = "X-Plane start options",
