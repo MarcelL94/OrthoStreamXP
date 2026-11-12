@@ -29,9 +29,10 @@ internal sealed record AircraftReport(double Lat, double Lon, double? GroundSpee
 /// <param name="onCamera">Told every position as the camera sees it (streaming's distance bands, the camera log).</param>
 /// <param name="onScreen">Told X-Plane's window width and horizontal field of view (the paging model's first guess).</param>
 /// <param name="onDate">Told the sim's day of the year with every position (the seasons).</param>
+/// <param name="daylight">Offered the sun's height with every position (shared with the photo streaming); its own when null.</param>
 internal sealed class AircraftPositionListener(IReadOnlyList<PrefetchTarget> targets, PositionOptions options,
     Action<double, double>? onPosition = null, Action<CameraReport>? onCamera = null, Action<double, double>? onScreen = null,
-    Action<int>? onDate = null)
+    Action<int>? onDate = null, Daylight? daylight = null)
     : IDisposable
 {
     private const double RetriggerDistanceM = 1500;
@@ -50,6 +51,7 @@ internal sealed class AircraftPositionListener(IReadOnlyList<PrefetchTarget> tar
     private readonly float?[] _camera = new float?[XPlaneUdp.CameraDatarefs.Count];
     private (float Width, float FieldOfView)? _screen;
     private bool _receiving;
+    private readonly Daylight _daylight = daylight ?? new Daylight();
     private volatile AircraftReport? _latest;
 
     /// <summary>The latest position from X-Plane, or null when none has arrived this session.</summary>
@@ -158,6 +160,7 @@ internal sealed class AircraftPositionListener(IReadOnlyList<PrefetchTarget> tar
         _latest = new AircraftReport(lat, lon, _motion.Current?.SpeedMps * 1.943844, DateTime.UtcNow);
         onCamera?.Invoke(Camera(lat, lon, jumped));
         if (onDate is not null && Value(XPlaneUdp.DateIndex) is { } day) onDate((int)Math.Round(day));
+        if (Value(XPlaneUdp.SunPitchIndex) is { } sun) _daylight.Offer(sun);
         if (onScreen is not null && Value(XPlaneUdp.WindowWidthIndex) is { } width && Value(XPlaneUdp.FieldOfViewIndex) is { } fov && _screen != (width, fov))
         {
             _screen = (width, fov);

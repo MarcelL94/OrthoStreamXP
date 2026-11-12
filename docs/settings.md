@@ -2,7 +2,7 @@
 
 [User guide](README.md) › Settings
 
-The Settings page has six tabs. Changes are saved straight away, and a short **Saved** note confirms each one.
+The Settings page has seven tabs. Changes are saved straight away, and a short **Saved** note confirms each one.
 
 Settings can be changed only while OrthoStreamXP is stopped. While the scenery is streaming, the page shows the settings in use but you cannot edit them: a banner says *Streaming is running. Stop it to change settings.* Click **Stop streaming** in the banner to stop it. Changes apply from the next start.
 
@@ -95,6 +95,43 @@ Most aerial photos are taken in summer.
 **Exposure** darkens photos that look too bright next to X-Plane's own scenery, like a camera's exposure. 100 % shows them as downloaded; 50 % is one stop darker.
 
 All the colour options only change how the photos look. The cache keeps the photos as downloaded, so changing them never downloads anything again.
+
+## Night
+
+![Settings: Night](images/settings-night.png)
+
+How the photo scenery looks after dark. Both switches are **Off** by default and work independently: you can have the lights without skipping the photos, skip the photos without the lights, or both.
+
+### Night lights
+
+X-Plane's own scenery glows at night where there are towns. Photo scenery replaces that ground, so without night lights a town on the photos is dark except for X-Plane's 3D roads, cars and buildings.
+
+Turn on **Light the towns at night** to give every photo tile its own lights:
+
+- street lamps along X-Plane's roads: a lamp every 28–45 m depending on the road, mostly warm sodium orange with some white LEDs, a few of them out;
+- a soft glow around the lamps and the bigger streets;
+- lit windows along town streets.
+
+How many lamps are lit and how bright the windows are depends on how built up the place is: a town centre is fully lit, a village keeps all its lamps, and in the open country only a few lamps along the roads shine. Between the lights the photo stays dark; X-Plane fades the lights in at dusk by itself.
+
+The roads come from the overlay package installed with your regions (**OrthoStream_Overlays**), or from another overlay package in X-Plane's Custom Scenery. Where no overlay package covers an area, its photo tiles stay dark at night.
+
+X-Plane loads the lights with the scenery, by day too, so they are there when night falls during a flight. The lights get the same detail as the photos under them at every distance, up to about 3 m per pixel beside the aircraft. Each tile's lights are made the first time X-Plane loads that tile, and again with more detail as you come closer; only the detail X-Plane reads is kept in the cache with the area's photos, compressed (about 50 KB per tile; a 20-minute flight around Zurich kept 160 MB), so the first flight over a new area uses a little more processor time and later flights none. Your scenery packages are not changed. **Off** is the default; a change applies from the next start.
+
+### Photos at night
+
+At night the ground is dark and you see little of the photos, so downloading them in full detail mostly costs bandwidth and processor time. Turn on **Skip the photos at night** to save that on night flights:
+
+- **While it is dark in X-Plane** (the sun more than 9° below the horizon), OrthoStreamXP downloads no detailed photos. The ground you fly over is a blurry version of the photos, made from the small overview pictures it already keeps for far-away scenery.
+- **The night lights still work.** With **Light the towns at night** on, the street lamps and windows shine on the blurry ground as usual, as sharp as ever.
+- **Places you have flown over before stay sharp**: photos already in the cache are shown as they are.
+- **Around sunset and sunrise** the photos download as usual, while there is still light to see them by: from sunset until well after the sky starts to darken, and again from early dawn.
+
+OrthoStreamXP reads the time of day from X-Plane. When a flight starts, X-Plane first loads the area around the aircraft, and only then, once the flight is running, says what time it is. So the area where a flight starts still gets its photos, even at night, and the saving starts from there: everything X-Plane loads as you fly on.
+
+If you fly on into the day, ground that loaded during the night stays blurry after sunrise until X-Plane loads it again, which happens as you fly on into new areas. Leave this off for flights that end in daylight. Like every setting, a change applies from the next start.
+
+How dark it must be is set in the settings file (**Show the file**), not on the page: `skip-photos-sun-below = 9` is the sun's height below the horizon in degrees, from 0 to 18. A higher number keeps the photos longer at dusk and brings them back sooner at dawn; a lower one skips more of the twilight.
 
 ## Tuning
 
