@@ -28,6 +28,8 @@ internal sealed class MountSession : IDisposable
     private ReadLog? _readLog;
     private SeasonClock? _seasons;
     private ColourMatcher? _colours;
+    /// <summary>The night textures' painting, shared by every package.</summary>
+    private NightPainting? _nightPainting;
     private Task? _summaryLoop, _sampleLoop;
     private bool _stopped;
 
@@ -139,14 +141,18 @@ internal sealed class MountSession : IDisposable
             TerrainDecals.Full => "Ground detail: 100 %; X-Plane draws its grass and dirt decals over the photos as the packages define",
             _ => $"Ground detail: {s.GroundDetail} %; X-Plane's grass and dirt decals are faded over the photos (the packages are not changed)",
         });
+        NightPainting? nightPainting = s.NightLights ? StartNightLights(s) : null;
 
         foreach (PackagePlan package in s.Packages)
         {
             var roots = new SceneryRoots(package.Source, package.Cache, s.TextureStore, s.Textures);
             TerrainDefinitions.RemoveCachedCopies(package.Cache);
+            if (NightTextures.RemoveOldFiles(package.Cache) is > 0 and var oldNights)
+                Log.Info($"Removed {oldNights} night textures an earlier version kept whole; they are painted again, keeping only what X-Plane reads");
             roots.RenameToCacheNames();
             _mounts.Add(new PackageMount(package, roots, builder, textureOptions, s.TrackAircraft, s.LoadAhead, s.LazyTerrainListing, decals,
-                streaming ? new TextureStreamer(roots, builder!, _view, model, streamingOptions) : null, _view, _readLog, _seasons, _usage, _colours, _loads, exposure));
+                streaming ? new TextureStreamer(roots, builder!, _view, model, streamingOptions) : null, _view, _readLog, _seasons, _usage, _colours, _loads, exposure,
+                nightPainting is null ? null : new NightTextures(package.Cache, s.Textures.SizeFor, nightPainting)));
             Log.Info($"Package {package.Name}: read-only from {package.Source}, cache overlay {package.Cache}, mounted at {package.Mountpoint}");
         }
         PrefetchTarget[] targets = [.. _mounts.Where(m => m.Catalog is not null)
@@ -237,6 +243,8 @@ internal sealed class MountSession : IDisposable
                 var (terrainCount, textureCount) = mount.Overlay.RequestCounts();
                 Log.Info($"{label}X-Plane request summary: {terrainCount} unique .ter definitions, {textureCount} unique DDS textures");
                 if (mount.Overlay.PrefetchSummary() is { } summary) Log.Info(label + summary);
+                if (mount.Overlay.Night is { } night && night.Counts is var (painted, dark, time, kept) && painted + dark > 0)
+                    Log.Info($"{label}Night lights: {painted} paintings in {time.TotalSeconds:F1} s ({kept / 1048576.0:F0} MB written to the cache, compressed), {dark} places without lights");
             }
             Log.Info(_cpu.Summary());
             ReviewFlight();
@@ -269,11 +277,23 @@ internal sealed class MountSession : IDisposable
         }
         _listener?.Dispose();
         foreach (PackageMount mount in _mounts) mount.Dispose();
+        _nightPainting?.Dispose();
         _tiles?.Dispose();
         _readLog?.Dispose();
         _summaries.Dispose();
         // Every file is closed now: the cache can be kept within its limit.
         if (summaries && !hurry) TrimCache();
+    }
+
+    /// <summary>The night lights' painting: X-Plane's roads from the overlay packages, and how many paintings run at once.</summary>
+    private NightPainting StartNightLights(MountSettings s)
+    {
+        var roads = new RoadNetworks(RoadNetworks.FindOverlayPackages(s.Packages, s.CustomScenery));
+        if (roads.Packages.Count > 0)
+            Log.Step($"Night lights: on; towns are lit along X-Plane's roads (from {string.Join(", ", roads.Packages.Select(Path.GetFileName))})");
+        else
+            Log.Warning("Night lights: on, but no overlay package with X-Plane's roads was found (install a region on the Packages page); the photo tiles stay dark at night");
+        return _nightPainting = new NightPainting(new NightPainter(roads), Math.Clamp(Environment.ProcessorCount / 4, 1, 4));
     }
 
     /// <summary>"Extra (level +1)": the quality in the words of the window.</summary>

@@ -197,6 +197,50 @@ public sealed class TerrainDefinitionsTests : IDisposable
         Assert.Throws<SettingsException>(() => Parse("ground-detail = -1"));
     }
 
+    private TerrainDefinitions WithNightLights() =>
+        new(new SceneryRoots(_tree.PathOf("source"), _tree.PathOf("cache"), null, new TexturePlan(0, TextureSizing.MaxSize)), decals: null, nightLights: true);
+
+    [Fact]
+    public void With_night_lights_a_land_tile_names_its_night_texture_right_after_its_photo()
+    {
+        Assert.Equal(
+            "A\n800\nTERRAIN\n\nLOAD_CENTER 74.50816 18.85254 2613 4096\nBASE_TEX_NOWRAP ../textures/11952_36192_BI16.dds\n" +
+            $"LIT_TEX_NOWRAP ../{NightTextures.Folder}/11952_36192_BI16_LIT.dds\n" +
+            "DECAL_LIB lib/g10/decals/maquify_2_green_key.dcl\nNO_ALPHA\n",
+            Resolve(WithNightLights(), "11952_36192_BI16.ter"));
+    }
+
+    [Fact]
+    public void With_night_lights_the_package_definition_gets_the_line_too()
+    {
+        WritePackageDefinition();
+        Assert.Contains(
+            $"BASE_TEX_NOWRAP ../textures/{Tile}.dds\nLIT_TEX_NOWRAP ../{NightTextures.Folder}/{Tile}_LIT.dds\nDECAL_LIB",
+            Resolve(WithNightLights(), $"{Tile}.ter"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Water_overlays_and_definitions_with_their_own_night_texture_get_no_night_line()
+    {
+        TerrainDefinitions terrain = WithNightLights();
+        Assert.DoesNotContain("LIT_TEX", Resolve(terrain, "100000_125184_BI18_water_overlay.ter"), StringComparison.Ordinal);
+        Assert.DoesNotContain("LIT_TEX", Resolve(terrain, "100000_148176_BI18_sea_overlay.ter"), StringComparison.Ordinal);
+
+        _tree.WriteText($"source/terrain/{Tile}.ter",
+            $"A\n800\nTERRAIN\n\nLOAD_CENTER 39.18969 125.65063 1895 4096\nBASE_TEX_NOWRAP ../textures/{Tile}.dds\nLIT_TEX ../textures/own_LIT.dds\n");
+        string own = Resolve(terrain, $"{Tile}.ter");
+        Assert.Contains("LIT_TEX ../textures/own_LIT.dds", own, StringComparison.Ordinal);
+        Assert.DoesNotContain(NightTextures.Folder, own, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Without_night_lights_no_definition_names_a_night_texture()
+    {
+        WritePackageDefinition();
+        Assert.DoesNotContain("LIT_TEX", Generate("11952_36192_BI16.ter"), StringComparison.Ordinal);
+        Assert.DoesNotContain("LIT_TEX", Resolve(_terrain, $"{Tile}.ter"), StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("terrain", "not_a_tile.ter")]
     [InlineData("terrain", "11953_36192_BI16.ter")] // row not on the 16-tile grid

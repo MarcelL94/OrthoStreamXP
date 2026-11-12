@@ -50,6 +50,7 @@ internal sealed class AircraftPositionListener(IReadOnlyList<PrefetchTarget> tar
     private readonly float?[] _camera = new float?[XPlaneUdp.CameraDatarefs.Count];
     private (float Width, float FieldOfView)? _screen;
     private bool _receiving;
+    private readonly Daylight _daylight = new();
     private volatile AircraftReport? _latest;
 
     /// <summary>The latest position from X-Plane, or null when none has arrived this session.</summary>
@@ -158,6 +159,7 @@ internal sealed class AircraftPositionListener(IReadOnlyList<PrefetchTarget> tar
         _latest = new AircraftReport(lat, lon, _motion.Current?.SpeedMps * 1.943844, DateTime.UtcNow);
         onCamera?.Invoke(Camera(lat, lon, jumped));
         if (onDate is not null && Value(XPlaneUdp.DateIndex) is { } day) onDate((int)Math.Round(day));
+        if (Value(XPlaneUdp.SunPitchIndex) is { } sun) _daylight.Offer(sun);
         if (onScreen is not null && Value(XPlaneUdp.WindowWidthIndex) is { } width && Value(XPlaneUdp.FieldOfViewIndex) is { } fov && _screen != (width, fov))
         {
             _screen = (width, fov);

@@ -43,6 +43,22 @@ The **Ground detail** slider sets how strong this effect is:
 
 Your scenery packages are not changed: OrthoStreamXP adjusts the terrain files as X-Plane reads them. The in-between strengths are made from X-Plane's own decal files, so they need the **X-Plane folder** to be set. Like every setting, a change applies from the next start.
 
+### Night lights
+
+X-Plane's own scenery glows at night where there are towns. Photo scenery replaces that ground, so without night lights a town on the photos is dark except for X-Plane's 3D roads, cars and buildings.
+
+Turn on **Light the towns at night** to give every photo tile its own lights:
+
+- street lamps along X-Plane's roads: a lamp every 28–45 m depending on the road, mostly warm sodium orange with some white LEDs, a few of them out;
+- a soft glow around the lamps and the bigger streets;
+- lit windows along town streets.
+
+How many lamps are lit and how bright the windows are depends on how built up the place is: a town centre is fully lit, a village keeps all its lamps, and in the open country only a few lamps along the roads shine. Between the lights the photo stays dark; X-Plane fades the lights in at dusk by itself.
+
+The roads come from the overlay package installed with your regions (**OrthoStream_Overlays**), or from another overlay package in X-Plane's Custom Scenery. Where no overlay package covers an area, its photo tiles stay dark at night.
+
+X-Plane loads the lights with the scenery, by day too, so they are there when night falls during a flight. The lights get the same detail as the photos under them at every distance, up to about 3 m per pixel beside the aircraft. Each tile's lights are made the first time X-Plane loads that tile, and again with more detail as you come closer; only the detail X-Plane reads is kept in the cache with the area's photos, compressed (about 50 KB per tile; a 20-minute flight around Zurich kept 160 MB), so the first flight over a new area uses a little more processor time and later flights none. Your scenery packages are not changed. **Off** is the default; a change applies from the next start.
+
 ## Folders
 
 ![Settings: Folders](images/settings-folders.png)

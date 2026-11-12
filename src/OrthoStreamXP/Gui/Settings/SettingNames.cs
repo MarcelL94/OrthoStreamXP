@@ -7,6 +7,7 @@ internal static class SettingNames
     {
         ["level-change"] = "Quality",
         ["ground-detail"] = "Ground detail",
+        ["night-lights"] = "Night lights",
         ["xplane"] = "X-Plane folder",
         ["base-packages"] = "Scenery packages folder",
         ["source"] = "Scenery packages folder",
