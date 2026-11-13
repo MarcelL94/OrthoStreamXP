@@ -33,10 +33,12 @@ internal static class XPlaneUdp
         ("sim/graphics/view/window_width", 4012),
         // The sim's date, for the seasons: days since 1 January.
         ("sim/time/local_date_days", 4013),
+        // The sun's height above the horizon in degrees: day, dusk and night in the log.
+        ("sim/graphics/scenery/sun_pitch_degrees", 4014),
     ];
 
     public const int ElevationIndex = 4003, HeightAglIndex = 4004, LocalXIndex = 4005, ViewXIndex = 4008, FieldOfViewIndex = 4011, WindowWidthIndex = 4012,
-        DateIndex = 4013;
+        DateIndex = 4013, SunPitchIndex = 4014;
 
     /// <summary>
     /// An RREF request: X-Plane then sends the dataref's value <paramref name="timesPerSecond"/> times a second to
