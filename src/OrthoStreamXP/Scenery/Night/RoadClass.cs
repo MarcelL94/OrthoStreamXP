@@ -11,8 +11,11 @@ internal enum RoadClass : byte
     Local,
 }
 
-/// <summary>How a class of road is lit: its width, how bright its lamps and street are, and how far apart its lamps stand.</summary>
-internal readonly record struct RoadLook(double WidthM, double Brightness, double LampSpacingM, bool LinedWithHouses);
+/// <summary>
+/// How a class of road is lit: its width, how bright its lamps and street are, how far apart its lamps stand, and
+/// whether they stand on both kerbs in turn or all on one.
+/// </summary>
+internal readonly record struct RoadLook(double WidthM, double Brightness, double LampSpacingM, bool LinedWithHouses, bool LampsBothSides);
 
 /// <summary>
 /// X-Plane's road subtypes (the network "road type" of lib/g10/roads.net as a DSF stores it) sorted into
@@ -41,12 +44,12 @@ internal static class RoadClasses
 
     public static RoadLook Look(RoadClass road) => road switch
     {
-        RoadClass.Motorway => new RoadLook(16, 1.00, 45, false),
-        RoadClass.Ramp => new RoadLook(8, 0.90, 35, false),
-        RoadClass.Primary => new RoadLook(12, 0.95, 35, true),
-        RoadClass.Secondary => new RoadLook(10, 0.85, 32, true),
-        RoadClass.Local => new RoadLook(6, 0.60, 28, true),
-        _ => new RoadLook(0, 0, double.PositiveInfinity, false),
+        RoadClass.Motorway => new RoadLook(16, 1.00, 45, false, true),
+        RoadClass.Ramp => new RoadLook(8, 0.90, 35, false, false),
+        RoadClass.Primary => new RoadLook(12, 0.95, 35, true, true),
+        RoadClass.Secondary => new RoadLook(10, 0.85, 32, true, true),
+        RoadClass.Local => new RoadLook(6, 0.60, 28, true, false),
+        _ => new RoadLook(0, 0, double.PositiveInfinity, false, false),
     };
 
     /// <summary>Whether a road counts towards how built up a place is (town streets, not motorways or country roads).</summary>

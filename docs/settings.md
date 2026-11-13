@@ -109,10 +109,10 @@ X-Plane's own scenery glows at night where there are towns. Photo scenery replac
 Turn on **Light the towns at night** to give every photo tile its own lights:
 
 - street lamps along X-Plane's roads: a lamp every 28–45 m depending on the road, mostly warm sodium orange with some white LEDs, a few of them out;
-- a soft glow around the lamps and the bigger streets;
-- lit windows along town streets.
+- a soft glow around the lamps, which stand beside the road so that X-Plane's 3D roads (or an overlay's, like simHeaven's) do not cover their light;
+- a faint, even light from the houses along town streets.
 
-How many lamps are lit and how bright the windows are depends on how built up the place is: a town centre is fully lit, a village keeps all its lamps, and in the open country only a few lamps along the roads shine. Between the lights the photo stays dark; X-Plane fades the lights in at dusk by itself.
+How many lamps are lit and how bright the houses are depends on how built up the place is: a town centre is fully lit, a village keeps all its lamps, and in the open country only a few lamps along the roads shine. Between the lights the photo stays dark; X-Plane fades the lights in at dusk by itself.
 
 The roads come from the overlay package installed with your regions (**OrthoStream_Overlays**), or from another overlay package in X-Plane's Custom Scenery. Where no overlay package covers an area, its photo tiles stay dark at night.
 
@@ -123,7 +123,7 @@ X-Plane loads the lights with the scenery, by day too, so they are there when ni
 At night the ground is dark and you see little of the photos, so downloading them in full detail mostly costs bandwidth and processor time. Turn on **Skip the photos at night** to save that on night flights:
 
 - **While it is dark in X-Plane** (the sun more than 9° below the horizon), OrthoStreamXP downloads no detailed photos. The ground you fly over is a blurry version of the photos, made from the small overview pictures it already keeps for far-away scenery.
-- **The night lights still work.** With **Light the towns at night** on, the street lamps and windows shine on the blurry ground as usual, as sharp as ever.
+- **The night lights still work.** With **Light the towns at night** on, the street lamps and houses shine on the blurry ground as usual, as sharp as ever.
 - **Places you have flown over before stay sharp**: photos already in the cache are shown as they are.
 - **Around sunset and sunrise** the photos download as usual, while there is still light to see them by: from sunset until well after the sky starts to darken, and again from early dawn.
 

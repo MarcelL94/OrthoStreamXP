@@ -6,9 +6,13 @@ namespace OrthoStreamXP.Scenery;
 /// Paints the lights of a town on a photo texture's night texture, from X-Plane's own roads:
 /// <list type="bullet">
 /// <item>street lamps along each road, every 28-45 m by its class, a third white LEDs and the rest sodium orange, at
-/// random levels and one in eight out; dimmer and farther apart along a country road;</item>
-/// <item>a soft glow round the lamps and the larger streets;</item>
-/// <item>windows in a band along the town streets, a few bright, most dim;</item>
+/// random levels and one in eight out; dimmer and farther apart along a country road. Each lamp is the pool of light
+/// it casts, centred beside the road, not on it: X-Plane's 3D roads (or an overlay's, like simHeaven's) are drawn
+/// over the photo and would hide light painted on the carriageway. Larger roads have lamps on both kerbs in turn,
+/// smaller ones on one;</item>
+/// <item>a soft glow round the lamps;</item>
+/// <item>the houses' light, smooth and faint, in a band along the town streets, and the streets themselves faintly
+/// lit (seen where X-Plane draws no 3D road);</item>
 /// <item>how built up the place is (<see cref="RoadNetwork.BuiltUp"/>) decides how many lamps are lit (all in a village,
 /// a fifth in the open country) and how bright the windows are.</item>
 /// </list>
@@ -18,9 +22,17 @@ namespace OrthoStreamXP.Scenery;
 /// </summary>
 internal sealed class NightPainter(RoadNetworks roads)
 {
-    private const double WindowBandM = 50, WindowLight = 0.10;
-    private const float StreetWeight = 0.12f, LampWeight = 1.0f, GlowWeight = 0.35f;
-    private const double LedShare = 0.35, LampsOut = 0.12, LampMin = 0.35, LampMax = 0.80;
+    /// <summary>The band along a town street its houses' light fills, and that light (the mean of the lit windows it was).</summary>
+    private const double WindowBandM = 50, WindowLight = 0.06;
+    /// <summary>How soft the town's light is (its Gaussian's sigma), and the share of it that is white rather than warm.</summary>
+    private const double TownSigmaM = 8;
+    private const float TownWhite = 0.25f;
+    private const float StreetWeight = 0.12f, LampWeight = 1.0f, GlowWeight = 0.7f;
+    private const double LedShare = 0.35, LampsOut = 0.12, LampMin = 0.55, LampMax = 1.0;
+    /// <summary>How far past the kerb a lamp's pool of light is centred.</summary>
+    private const double LampSetbackM = 2;
+    /// <summary>How wide the glow round the lamps is (its Gaussian's sigma).</summary>
+    private const double GlowSigmaM = 15;
     /// <summary>The share of lamps lit where nothing is built up; all are lit from <see cref="VillageBuiltUp"/> on.</summary>
     private const double LitShareMin = 0.2, VillageBuiltUp = 0.25;
     /// <summary>A lamp's light where nothing is built up, against 2 - this in a city centre.</summary>
@@ -28,7 +40,7 @@ internal sealed class NightPainter(RoadNetworks roads)
     /// <summary>The windows' light where nothing is built up, and how much more in a city centre.</summary>
     private const double WindowsCountry = 0.2, WindowsCity = 1.3;
     /// <summary>What the lights drawn are multiplied by.</summary>
-    public const float Gain = 0.75f;
+    public const float Gain = 0.9f;
     /// <summary>Light fainter than this (out of 255, in its brightest channel) is black: BC1 cannot keep its colour.</summary>
     public const int Floor = 6;
     /// <summary>How far round the texture roads are looked for: their glow reaches in.</summary>
@@ -59,7 +71,7 @@ internal sealed class NightPainter(RoadNetworks roads)
                 foreach (int chain in chains) DrawRoad(network, chain, projection, metresPerPixel, canvas, random);
                 anyRoad |= chains.Count > 0;
             }
-        return anyRoad && Compose(canvas, side, metresPerPixel, random);
+        return anyRoad && Compose(canvas, side, metresPerPixel);
     }
 
     /// <summary>The same lamps for a texture every time it is painted.</summary>
@@ -94,10 +106,12 @@ internal sealed class NightPainter(RoadNetworks roads)
             if (houses) NightRaster.Line(canvas.Windows, canvas.Side, x[i], y[i], x[i + 1], y[i + 1], bandWidth, windows);
         }
 
-        // The lamps: one every spacing along the road from a random start. Every draw is made whatever its outcome,
-        // so one lamp's fate never moves the next lamps.
+        // The lamps: one every spacing along the road from a random start, beside it (on one kerb, or on both in
+        // turn). Every draw is made whatever its outcome, so one lamp's fate never moves the next lamps.
         double spacing = look.LampSpacingM * (rural ? RoadClasses.RuralSpacing : 1) / metresPerPixel;
+        double setback = (look.WidthM / 2 + LampSetbackM) / metresPerPixel;
         float[] lamps = random.NextDouble() < LedShare ? canvas.Led : canvas.Sodium;
+        int kerb = random.NextDouble() < 0.5 ? 1 : -1;
         double next = random.NextDouble() * spacing, travelled = 0;
         double lampScale = LampCountry + 2 * (1 - LampCountry) * builtUp, lampSigma = LampSigma(metresPerPixel);
         for (int i = 0; i < count - 1; i++)
@@ -108,7 +122,9 @@ internal sealed class NightPainter(RoadNetworks roads)
                 double t = (next - travelled) / length;
                 bool working = random.NextDouble() >= LampsOut, lit = random.NextDouble() < litShare;
                 double level = brightness * (LampMin + (LampMax - LampMin) * random.NextDouble()) * lampScale;
-                double lx = x[i] + t * dx, ly = y[i] + t * dy;
+                // Off the road to the kerb's side: (-dy, dx) is square to the road.
+                double lx = x[i] + t * dx - kerb * setback * dy / length, ly = y[i] + t * dy + kerb * setback * dx / length;
+                if (look.LampsBothSides) kerb = -kerb;
                 // A lamp outside the texture is its neighbour's to draw, which places its own lamps.
                 if (!working || !lit || lx < 0 || ly < 0 || lx >= canvas.Side || ly >= canvas.Side) continue;
                 NightRaster.Spot(lamps, canvas.Side, lx, ly, lampSigma, (float)level);
@@ -117,32 +133,31 @@ internal sealed class NightPainter(RoadNetworks roads)
         }
     }
 
-    /// <summary>The lamps, their glow, the streets and the windows together, in their colours, into the RGB picture; false when all black.</summary>
-    private static bool Compose(NightWorkspace canvas, int side, double metresPerPixel, Random random)
+    /// <summary>The lamps, their glow and the town's light together, in their colours, into the RGB picture; false when all black.</summary>
+    private static bool Compose(NightWorkspace canvas, int side, double metresPerPixel)
     {
-        double sigma = Math.Max(1.5, 12 / metresPerPixel);
-        // The warm glow's source is made in the cool glow's picture, which is filled only after.
+        double sigma = Math.Max(1.5, GlowSigmaM / metresPerPixel);
+        // The glow is the lamps' alone: they stand beside the road, so it lights the verges, not the carriageway
+        // a 3D road covers.
         float[] warmGlow = canvas.WarmGlow, coolGlow = canvas.CoolGlow;
-        for (int i = 0; i < coolGlow.Length; i++) coolGlow[i] = canvas.Street[i] * 0.5f + canvas.Sodium[i];
-        NightRaster.Blur(coolGlow, side, sigma, canvas.Across, warmGlow);
+        NightRaster.Blur(canvas.Sodium, side, sigma, canvas.Across, warmGlow);
         NightRaster.Blur(canvas.Led, side, sigma, canvas.Across, coolGlow);
+
+        // The houses' light beside the streets and the streets' own faint light, as one smooth light: drawn pixel by
+        // pixel (a window here, none there) it was a speckle, which X-Plane's enlarging beside the aircraft made blotches,
+        // and a street's hard edge came out in steps.
+        float[] town = canvas.Windows;
+        for (int i = 0; i < town.Length; i++)
+            if (canvas.Street[i] > 0) town[i] = canvas.Street[i] * StreetWeight;
+        NightRaster.Blur(town, side, Math.Max(1, TownSigmaM / metresPerPixel), canvas.Across, town);
 
         byte[] rgb = canvas.Rgb;
         bool any = false;
         for (int i = 0; i < side * side; i++)
         {
-            if (warmGlow[i] == 0 && coolGlow[i] == 0 && canvas.Windows[i] == 0) continue; // the glow covers the streets and lamps
-            float warm = warmGlow[i] * GlowWeight + canvas.Street[i] * StreetWeight + canvas.Sodium[i] * LampWeight;
-            float cool = coolGlow[i] * GlowWeight + canvas.Led[i] * LampWeight;
-            if (canvas.Windows[i] > 0)
-            {
-                // A few windows bright, most dim (the sixth power of an even draw); three in ten lit white, the rest warm.
-                double draw = random.NextDouble(), cubed = draw * draw * draw;
-                double spark = cubed * cubed * 2.5 + 0.25;
-                float window = (float)(canvas.Windows[i] * spark);
-                if (random.NextDouble() < 0.3) cool += window;
-                else warm += window;
-            }
+            if (warmGlow[i] == 0 && coolGlow[i] == 0 && town[i] == 0) continue; // the glows cover the lamps and streets
+            float warm = warmGlow[i] * GlowWeight + canvas.Sodium[i] * LampWeight + town[i] * (1 - TownWhite);
+            float cool = coolGlow[i] * GlowWeight + canvas.Led[i] * LampWeight + town[i] * TownWhite;
             byte r = ToByte((warm * Sodium[0] + cool * Led[0]) * Gain), g = ToByte((warm * Sodium[1] + cool * Led[1]) * Gain), b = ToByte((warm * Sodium[2] + cool * Led[2]) * Gain);
             if (Math.Max(r, Math.Max(g, b)) < Floor) continue;
             (rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]) = (r, g, b);
@@ -152,10 +167,11 @@ internal sealed class NightPainter(RoadNetworks roads)
     }
 
     /// <summary>
-    /// A lamp's pool of light holds as much light as a square this wide at full strength (two pixels of a ZL16 texture
-    /// painted at 1024 px in Europe), at every resolution: finer painting makes it rounder, not dimmer.
+    /// A lamp's pool of light holds as much light as a square this wide at full strength (about 2.5 pixels of a ZL16
+    /// texture painted at 1024 px in Europe; a street lamp lights the ground some 15-20 m across), at every resolution:
+    /// finer painting makes it rounder, not dimmer.
     /// </summary>
-    private const double LampSizeM = 13;
+    internal const double LampSizeM = 17;
 
     /// <summary>
     /// The width, in pixels, of a lamp's round soft spot: a Gaussian holding as much light as the square of

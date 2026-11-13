@@ -94,7 +94,8 @@ internal static class NightRaster
     /// <summary>
     /// The picture blurred with a Gaussian of <paramref name="sigma"/> pixels (its kernel 4 sigmas each side, the edges
     /// mirrored), one direction then the other, into <paramref name="result"/> (<paramref name="across"/> holds the
-    /// half-way picture). Rows that stay black are only cleared.
+    /// half-way picture). Rows that stay black are only cleared. <paramref name="result"/> may be the picture itself: it
+    /// is read only into the half-way picture, before the result is written.
     /// </summary>
     public static void Blur(float[] picture, int side, double sigma, float[] across, float[] result)
     {

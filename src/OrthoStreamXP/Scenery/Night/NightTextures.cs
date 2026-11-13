@@ -14,7 +14,7 @@ namespace OrthoStreamXP.Scenery;
 /// with level 2 of the night texture). So a night texture has the photo's size, or a town's lights would be four times
 /// coarser than the ground under them. It is painted at the detail X-Plane reads, from <see cref="ReferenceSide"/> (about
 /// 6.5 m a pixel) to twice as fine; a finer level is the painting enlarged smoothly. What X-Plane reads is kept in the
-/// package's cache (night\21904_35824_BI16.lit4, compressed, counted and removed with its area); a tile without
+/// package's cache (night\21904_35824_BI16.lit6, compressed, counted and removed with its area); a tile without
 /// lights keeps nothing and reads as black.
 /// </para>
 /// </summary>
@@ -26,8 +26,8 @@ internal sealed class NightTextures(string cache, Func<int, int> photoSide, Nigh
     public const string Folder = "orthostreamxp_night";
     private const string Suffix = "_LIT.dds";
     /// <summary>The cache file's extension; a new way of keeping them gets a new one, and the old files are removed.</summary>
-    private const string CacheExtension = ".lit4";
-    private static readonly string[] OldExtensions = [".lit1", ".lit2", ".lit3"];
+    private const string CacheExtension = ".lit6";
+    private static readonly string[] OldExtensions = [".lit1", ".lit2", ".lit3", ".lit4", ".lit5"];
     /// <summary>A ZL16 texture painted this wide is about 6.5 m a pixel in Europe: lamps 28-45 m apart stay apart.</summary>
     private const int Reference16 = 1024;
     /// <summary>The level side X-Plane reads of most night textures, from far: the first painting keeps that much.</summary>

@@ -179,6 +179,36 @@ public sealed class NightLightsTests : IDisposable
     }
 
     [Fact]
+    public void Lamps_light_the_ground_beside_the_road_on_both_kerbs_where_3D_roads_do_not_cover_it()
+    {
+        var (north, west, south, east) = Bounds(Nice);
+        var dsf = new DsfBuilder(South, West);
+        dsf.Road(10, ((west + east) / 2, south), ((west + east) / 2, north)); // a primary road, 12 m wide, down the middle
+        _tree.WriteBytes("overlays/" + RoadNetworks.TileFile(South, West).Replace('\\', '/'), dsf.Build());
+        var painter = new NightPainter(new RoadNetworks([_tree.PathOf("overlays")]));
+        const int Side = 2048;
+        var workspace = new NightWorkspace(Side);
+        Assert.True(painter.Paint(Nice, workspace));
+
+        // The light of each column across the road (Web Mercator: the road's longitude is the middle column).
+        double[] column = new double[Side];
+        for (int y = 0; y < Side; y++)
+            for (int x = 0; x < Side; x++)
+                column[x] += workspace.Rgb[(y * Side + x) * 3];
+        double metresPerPixel = Nice.GroundSizeM / Side, road = Side / 2.0;
+        double Sum(double fromM, double toM)
+        {
+            int from = (int)Math.Round(road + fromM / metresPerPixel), to = (int)Math.Round(road + toM / metresPerPixel);
+            return column[from..to].Sum();
+        }
+        double carriageway = Sum(-6, 6), left = Sum(-60, -6), right = Sum(6, 60);
+        // Most of the light is where a 3D road over the photo leaves it seen (lamps on the road's middle left a quarter
+        // there), as much on either side.
+        Assert.True((left + right) / (left + right + carriageway) > 0.5, $"beside the road {left:F0} and {right:F0}, on it {carriageway:F0}");
+        Assert.InRange(left / right, 0.7, 1.4);
+    }
+
+    [Fact]
     public void A_place_without_roads_has_no_lights()
     {
         Assert.False(new NightPainter(new RoadNetworks([])).Paint(Nice, new NightWorkspace(1024)));
@@ -199,7 +229,7 @@ public sealed class NightLightsTests : IDisposable
     }
 
     [Theory]
-    [InlineData(6.5)] // a far texture: the 2 x 2 dot it was
+    [InlineData(6.5)] // a far texture
     [InlineData(3.2)] // beside the aircraft: twice as fine
     public void A_lamp_is_a_round_soft_spot_with_as_much_light_as_its_square_in_metres(double metresPerPixel)
     {
@@ -209,7 +239,7 @@ public sealed class NightLightsTests : IDisposable
         NightRaster.Spot(picture, Side, 32.5, 32.5, sigma, 0.6f); // a pixel's centre
 
         Assert.Equal(0.6f, picture[32 * Side + 32], 3);
-        double square = Math.Pow(13 / metresPerPixel, 2) * 0.6;
+        double square = Math.Pow(NightPainter.LampSizeM / metresPerPixel, 2) * 0.6;
         Assert.InRange(picture.Sum(), square * 0.97, square * 1.03);
         // Round: as bright at the same distance whichever the direction.
         Assert.Equal(picture[32 * Side + 34], picture[34 * Side + 32], 5);
@@ -226,6 +256,18 @@ public sealed class NightLightsTests : IDisposable
         Assert.Equal(picture[7 * 16 + 7], picture[8 * 16 + 8], 5);
         Assert.Equal(picture[7 * 16 + 8], picture[8 * 16 + 7], 5);
         Assert.Equal(picture[7 * 16 + 7], picture[7 * 16 + 8], 5);
+    }
+
+    [Fact]
+    public void A_picture_blurred_in_place_is_the_same_as_blurred_into_another()
+    {
+        const int Side = 64;
+        float[] picture = new float[Side * Side], across = new float[Side * Side], result = new float[Side * Side];
+        NightRaster.Line(picture, Side, 5, 10, 50, 40, 3, 0.4f);
+        NightRaster.Spot(picture, Side, 60, 3, 1.5, 0.9f); // by an edge: the mirrored rows
+        NightRaster.Blur(picture, Side, 2.5, across, result);
+        NightRaster.Blur(picture, Side, 2.5, across, picture);
+        Assert.Equal(result, picture);
     }
 
     // --- The DDS file -----------------------------------------------------------------------------------------------
@@ -387,7 +429,7 @@ public sealed class NightLightsTests : IDisposable
         Assert.Equal(0, night.Counts.Painted);
         var layout = texture.Layout;
         byte[] far = WholeNightTexture(Nice, 1024), near = WholeNightTexture(Nice, 2048);
-        string file = _tree.PathOf($"cache/night/{Nice.Stem}.lit4");
+        string file = _tree.PathOf($"cache/night/{Nice.Stem}.lit6");
 
         // As X-Plane loads a far tile: the header chunk, then the levels from 256 px (the photo's 256 px level with them).
         var cursor = new ReadCursor();
@@ -440,9 +482,11 @@ public sealed class NightLightsTests : IDisposable
         _tree.WriteText($"cache/night/{Nice.Stem}.lit1", "whole");
         _tree.WriteText($"cache/night/{Nice.Stem}.lit2", "four times coarser");
         _tree.WriteText($"cache/night/{Nice.Stem}.lit3", "square lamps");
-        _tree.WriteText($"cache/night/{Nice.Stem}.lit4", "now");
-        Assert.Equal(3, NightTextures.RemoveOldFiles(_tree.PathOf("cache")));
-        Assert.Equal([_tree.PathOf($"cache/night/{Nice.Stem}.lit4")], Directory.GetFiles(_tree.PathOf("cache/night")));
+        _tree.WriteText($"cache/night/{Nice.Stem}.lit4", "lamps on the road");
+        _tree.WriteText($"cache/night/{Nice.Stem}.lit5", "speckled windows");
+        _tree.WriteText($"cache/night/{Nice.Stem}.lit6", "now");
+        Assert.Equal(5, NightTextures.RemoveOldFiles(_tree.PathOf("cache")));
+        Assert.Equal([_tree.PathOf($"cache/night/{Nice.Stem}.lit6")], Directory.GetFiles(_tree.PathOf("cache/night")));
     }
 
     [Fact]
@@ -450,7 +494,7 @@ public sealed class NightLightsTests : IDisposable
     {
         byte[] kept = new byte[200_000]; // four chunks: two black, one with light, one partly
         new Random(5).NextBytes(kept.AsSpan(70_000, 50_000));
-        string path = _tree.PathOf("cache/night/test.lit4");
+        string path = _tree.PathOf("cache/night/test.lit6");
         NightFile.Write(path, 3, kept);
 
         Assert.True(new FileInfo(path).Length < 60_000, "the black chunks take nothing");
