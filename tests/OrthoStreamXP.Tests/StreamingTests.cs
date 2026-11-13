@@ -30,7 +30,7 @@ public sealed class StreamingTests : IDisposable
 
     /// <param name="level">-3: ZL16 textures are 1024 px from zoom 14, their base level 2 (zoom 12). -2: 2048 px from zoom 15, base level 3.</param>
     private Setup Streaming(int level = -3, double maxWait = 0.2, Func<int, TimeSpan>? delay = null, Setup? sharing = null, int detailedBuilds = 16,
-        long buildTiles = TextureStreamer.DefaultBuildTiles, Func<Uri, Task?>? hold = null, Func<int, HttpStatusCode>? status = null,
+        long buildTiles = TextureStreamer.DefaultBuildTiles, Func<Uri, Task?>? hold = null, Func<int, HttpStatusCode>? status = null, Daylight? nightPause = null,
         string cache = "cache")
     {
         FakeTileServer server = sharing?.Server ?? new FakeTileServer(status: status, delay: delay, hold: hold);
@@ -44,7 +44,7 @@ public sealed class StreamingTests : IDisposable
         long buildMemory = detailedBuilds * TextureStreamer.BuildWeight(plan.SizeFor(16));
         // k = 1830: the distances in these tests are laid out for it, whatever the default.
         var streamer = Track(new TextureStreamer(roots, builder, view, new PagingModel(1830),
-            new StreamingOptions(NearWaitSeconds: 20, MaxWaitSeconds: maxWait, BuildMemoryBytes: buildMemory, BuildTiles: buildTiles)));
+            new StreamingOptions(NearWaitSeconds: 20, MaxWaitSeconds: maxWait, BuildMemoryBytes: buildMemory, BuildTiles: buildTiles), nightPause));
         return new Setup(server, tiles, roots, builder, view, streamer);
     }
 
@@ -457,6 +457,116 @@ public sealed class StreamingTests : IDisposable
         Assert.Equal((3, Band.Far), (answer.Wanted, answer.Band));
         await Until(() => s.Streamer.RealFrom(t) <= 3);
         Assert.Equal([12], Zooms(s.Server)); // one base tile, not level 2's 16 tiles at zoom 14
+    }
+
+    // ---------------------------------------------------------------- photos skipped at night
+
+    [Fact]
+    public async Task At_night_a_near_read_downloads_only_the_base_tile_and_is_not_counted_as_a_blurry_read()
+    {
+        var sun = new Daylight();
+        sun.Offer(-20);
+        Setup s = Streaming(maxWait: 5, nightPause: sun);
+        StreamedTexture t = s.Streamer.Get(Texture())!;
+
+        var (bytes, answer) = ReadLevel(s.Streamer, t, 0);
+        Assert.True(s.Streamer.PhotosPaused);
+        Assert.Equal((Band.Near, Served.StandIn), (answer.Band, answer.Served)); // the base, stretched
+        AssertColor(TileColor, bytes, 1024);
+        Assert.Equal([12], Zooms(s.Server));
+        Assert.Null(s.Roots.CachedFile(Texture()));
+        // Blurry by choice: not a read the tuning, the flight report or the Home page counts against the photos.
+        Assert.Equal((0L, 0L, 1L), (s.Streamer.Reads, s.Streamer.StandInReads, s.Streamer.NightReads));
+
+        await Until(() => s.Streamer.RealFrom(t) == t.BaseMip);
+        Assert.Equal([12], Zooms(s.Server));
+    }
+
+    [Fact]
+    public async Task At_night_every_piece_of_a_level_read_in_pieces_counts_as_a_night_read()
+    {
+        var sun = new Daylight();
+        sun.Offer(-20);
+        Setup s = Streaming(maxWait: 5, nightPause: sun);
+        StreamedTexture t = s.Streamer.Get(Texture())!;
+        ReadLevel(s.Streamer, t, t.BaseMip); // the base, so the night reads below are stretched from it
+        await Until(() => s.Streamer.RealFrom(t) == t.BaseMip);
+        (long reads, long standIns) = (s.Streamer.Reads, s.Streamer.StandInReads); // the base's own read, flat before it arrived
+
+        var cursor = new ReadCursor();
+        long start = t.Layout.Offset(1);
+        int half = t.Layout.LengthOf(1) / 2;
+        Assert.Equal(Served.StandIn, s.Streamer.Read(t, cursor, start, new byte[half]).Served);
+        Assert.Equal(Served.StandIn, s.Streamer.Read(t, cursor, start + half, new byte[t.Layout.LengthOf(1) - half]).Served);
+
+        Assert.Equal((reads, standIns, 2L), (s.Streamer.Reads, s.Streamer.StandInReads, s.Streamer.NightReads));
+    }
+
+    [Fact]
+    public void At_night_a_texture_already_in_the_cache_is_served_sharp()
+    {
+        var sun = new Daylight();
+        Setup s = Streaming(nightPause: sun);
+        StreamedTexture t = s.Streamer.Get(Texture())!;
+        ReadLevel(s.Streamer, t, 0); // by day: the whole texture
+        int downloads = s.Server.Requests.Count;
+
+        sun.Offer(-20);
+        Setup again = Streaming(sharing: s, nightPause: sun); // the next session finds it in the cache
+        StreamedTexture cached = again.Streamer.Get(Texture())!;
+        var (_, answer) = ReadLevel(again.Streamer, cached, 0);
+        Assert.Equal(Served.Real, answer.Served);
+        Assert.Equal(downloads, s.Server.Requests.Count);
+    }
+
+    [Fact]
+    public async Task At_night_load_ahead_fetches_only_base_tiles_even_beside_the_aircraft()
+    {
+        var sun = new Daylight();
+        sun.Offer(-20);
+        Setup s = Streaming(nightPause: sun);
+        var catalog = new TextureCatalog();
+        using var warmer = new MipWarmer(catalog, s.Streamer, s.View, heavy: 2);
+        StreamedTexture near = s.Streamer.Get(Texture())!;
+        s.View.Update(new CameraReport(near.Lat, near.Lon, 2, null, null, false, DateTime.UtcNow));
+        catalog.AddTerrain(VirtualPath.Of("terrain", Stem + ".ter"));
+
+        warmer.StartWhatFits();
+        await Until(() => s.Streamer.RealFrom(near) <= near.BaseMip);
+        Assert.Equal([12], Zooms(s.Server));
+    }
+
+    [Fact]
+    public void In_twilight_by_day_and_before_XPlane_sends_the_sun_the_photos_stream_in_full()
+    {
+        var sun = new Daylight();
+        Setup s = Streaming(nightPause: sun);
+        Assert.False(s.Streamer.PhotosPaused); // no sun yet
+        sun.Offer(-3);
+        Assert.False(s.Streamer.PhotosPaused); // dusk: the ground is still seen
+        sun.Offer(-8);
+        Assert.False(s.Streamer.PhotosPaused); // past civil twilight, but the sky still lights the ground
+
+        StreamedTexture t = s.Streamer.Get(Texture())!;
+        var (_, answer) = ReadLevel(s.Streamer, t, 0);
+        Assert.Equal(Served.Real, answer.Served);
+        Assert.Equal(16, Zooms(s.Server).Count(z => z == 14));
+    }
+
+    [Fact]
+    public void When_the_sun_rises_the_next_read_gets_the_photo_again()
+    {
+        var sun = new Daylight();
+        sun.Offer(-20);
+        Setup s = Streaming(maxWait: 5, nightPause: sun);
+        StreamedTexture t = s.Streamer.Get(Texture())!;
+        Assert.Equal(Served.StandIn, ReadLevel(s.Streamer, t, 1).Answer.Served);
+
+        sun.Offer(10);
+        var (_, answer) = ReadLevel(s.Streamer, t, 1);
+        Assert.Equal(Served.Real, answer.Served);
+        Assert.Contains(13, Zooms(s.Server));
+        Assert.Equal((1L, 1L), (s.Streamer.Reads, s.Streamer.NightReads));
     }
 
     // ---------------------------------------------------------------- load-ahead

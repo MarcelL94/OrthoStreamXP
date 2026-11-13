@@ -39,6 +39,8 @@ internal sealed class SceneryFileSystem(SceneryOverlay overlay, string label, Re
         public StreamedTexture? Streamed { get; init; }
         /// <summary>A terrain definition made in memory (no backing file).</summary>
         public byte[]? Content { get; init; }
+        /// <summary>A night texture painted as X-Plane reads it (no backing file).</summary>
+        public NightTexture? Night { get; init; }
         /// <summary>A photo texture X-Plane gets as a finished file: its reads are still paging evidence.</summary>
         public StreamedTexture? Photo { get; init; }
         public ReadCursor? Cursor { get; init; }
@@ -151,6 +153,13 @@ internal sealed class SceneryFileSystem(SceneryOverlay overlay, string label, Re
             readLog?.Open(package, path, "memory");
             return STATUS_SUCCESS;
         }
+        if (entry.Night is { } night)
+        {
+            fileNode = new Handle(path, "", false) { Night = night, Cursor = new ReadCursor(), Length = night.Layout.Length };
+            fileInfo = Describe(night);
+            readLog?.Open(package, path, "night");
+            return STATUS_SUCCESS;
+        }
         string backing = entry.Backing!;
         bool isDirectory = Directory.Exists(backing);
         // Share delete so a finished build can atomically replace a DDS that X-Plane still has open.
@@ -188,6 +197,7 @@ internal sealed class SceneryFileSystem(SceneryOverlay overlay, string label, Re
         var handle = (Handle)fileNode;
         fileInfo = handle.Streamed is { } streamed ? Describe(streamed)
             : handle.Content is { } content ? Describe(content)
+            : handle.Night is { } night ? Describe(night)
             : Describe(handle.IsDirectory ? new DirectoryInfo(handle.Backing) : new FileInfo(handle.Backing));
         return STATUS_SUCCESS;
     }
@@ -202,7 +212,7 @@ internal sealed class SceneryFileSystem(SceneryOverlay overlay, string label, Re
     {
         bytesTransferred = 0;
         var handle = (Handle)fileNode;
-        if (offset >= (ulong)handle.Length) return handle.File is null && handle.Streamed is null && handle.Content is null ? STATUS_ACCESS_DENIED : STATUS_END_OF_FILE;
+        if (offset >= (ulong)handle.Length) return handle.File is null && handle.Streamed is null && handle.Content is null && handle.Night is null ? STATUS_ACCESS_DENIED : STATUS_END_OF_FILE;
         var target = new Span<byte>((void*)buffer, checked((int)length));
         // Before the read: a photo arriving meanwhile is read with the base's correction until the next read, never the reverse.
         TextureColour? colour = ColourOf(handle);
@@ -218,6 +228,13 @@ internal sealed class SceneryFileSystem(SceneryOverlay overlay, string label, Re
         {
             int count = Math.Min(target.Length, content.Length - (int)offset);
             content.AsSpan((int)offset, count).CopyTo(target);
+            bytesTransferred = (uint)count;
+            readLog?.Read(new ReadRecord(package, handle.Path, (long)offset, count));
+            return STATUS_SUCCESS;
+        }
+        if (handle.Night is { } night)
+        {
+            int count = night.Read(handle.Cursor!, (long)offset, target);
             bytesTransferred = (uint)count;
             readLog?.Read(new ReadRecord(package, handle.Path, (long)offset, count));
             return STATUS_SUCCESS;
@@ -341,6 +358,7 @@ internal sealed class SceneryFileSystem(SceneryOverlay overlay, string label, Re
         normalizedName = fileName;
         fileInfo = entry.Streamed is { } streamed ? Describe(streamed)
             : entry.Content is { } content ? Describe(content)
+            : entry.Night is { } night ? Describe(night)
             : Directory.Exists(entry.Backing) ? Describe(new DirectoryInfo(entry.Backing!)) : Describe(new FileInfo(entry.Backing!));
         return STATUS_SUCCESS;
     }
@@ -362,11 +380,16 @@ internal sealed class SceneryFileSystem(SceneryOverlay overlay, string label, Re
     }
 
     /// <summary>A terrain definition made in memory: its size, and the mount time.</summary>
-    private static FspFileInfo Describe(byte[] content) => new()
+    private static FspFileInfo Describe(byte[] content) => Describe((ulong)content.Length);
+
+    /// <summary>A night texture: its full size, every level, whatever is painted yet; the mount time.</summary>
+    private static FspFileInfo Describe(NightTexture night) => Describe((ulong)night.Layout.Length);
+
+    private static FspFileInfo Describe(ulong size) => new()
     {
         FileAttributes = (uint)FileAttributes.Archive,
-        AllocationSize = (ulong)content.Length,
-        FileSize = (ulong)content.Length,
+        AllocationSize = size,
+        FileSize = size,
         CreationTime = MountedAt,
         LastAccessTime = MountedAt,
         LastWriteTime = MountedAt,

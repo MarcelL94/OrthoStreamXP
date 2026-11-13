@@ -18,7 +18,7 @@ internal sealed class PackageMount : IDisposable
 
     public PackageMount(PackagePlan plan, SceneryRoots roots, TextureBuilder? builder, TextureOptions textureOptions,
         bool trackAircraft, bool loadAhead, bool lazyTerrainListing, TerrainDecals decals, TextureStreamer? streamer, ViewTracker view, ReadLog? readLog,
-        SeasonClock? seasons, AreaUsage? usage, ColourMatcher? colours, SceneryLoads loads, ushort[]? exposure)
+        SeasonClock? seasons, AreaUsage? usage, ColourMatcher? colours, SceneryLoads loads, ushort[]? exposure, NightTextures? night)
     {
         Plan = plan;
         Roots = roots;
@@ -35,7 +35,7 @@ internal sealed class PackageMount : IDisposable
             // Two builds queued per worker keep every worker busy; the rest wait in load-ahead's own priority order.
             LoadAhead = Catalog is null || !loadAhead ? null : new LoadAheadPrefetcher(Catalog, Scheduler!, roots, textureOptions.DdsBuildWorkers * 2);
         }
-        Overlay = new SceneryOverlay(roots, Scheduler, lazyTerrainListing, Catalog, streamer, decals);
+        Overlay = new SceneryOverlay(roots, Scheduler, lazyTerrainListing, Catalog, streamer, decals, night);
         _host = new FileSystemHost(new SceneryFileSystem(Overlay, "OrthoStreamXP", readLog, plan.Name, seasons, usage, colours, loads, exposure));
     }
 

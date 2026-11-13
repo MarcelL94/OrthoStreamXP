@@ -25,8 +25,12 @@ if ($LASTEXITCODE -ne 0) { throw 'publish failed' }
 $license = (Get-Content installer\license-notice.md -Raw) + "`n`n---`n`n" + (Get-Content LICENSE -Raw)
 Set-Content artifacts\license.md $license -Encoding utf8
 
+# The release notes go into the update feed: the app shows them before it installs the update.
+$notes = "release-notes\v$Version.md"
+$notesArgs = if (Test-Path $notes) { @('--releaseNotes', $notes) } else { Write-Host "No $notes; the update has no notes"; @() }
+
 # --framework: the installer installs the .NET desktop runtime first when the PC does not have it.
-dotnet vpk pack `
+dotnet vpk pack @notesArgs `
     --packId OrthoStreamXP.App `
     --packVersion $Version `
     --packTitle OrthoStreamXP `

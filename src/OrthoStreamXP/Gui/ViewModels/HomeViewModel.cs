@@ -49,8 +49,8 @@ internal sealed class HomeViewModel : ObservableObject, IPage
             ShowReviewOf(null);
         });
         _timer.Tick += (_, _) => Update();
-        // Installed only when chosen, and only while the scenery is not streaming: OrthoStreamXP restarts to do it.
-        InstallUpdate = new RelayCommand(_updates.ApplyAndRestart, () => _updates.Ready is not null && Mount.State == MountState.Stopped);
+        // Installed only when chosen (after the release notes), and only while the scenery is not streaming: OrthoStreamXP restarts to do it.
+        InstallUpdate = new RelayCommand(OfferUpdate, () => _updates.Ready is not null && Mount.State == MountState.Stopped);
         _updateTimer.Tick += async (_, _) =>
         {
             _updateTimer.Interval = TimeSpan.FromHours(6);
@@ -91,6 +91,12 @@ internal sealed class HomeViewModel : ObservableObject, IPage
     /// <summary>Stopped: start OrthoStreamXP, then X-Plane. Running: start X-Plane.</summary>
     public ICommand Fly { get; }
 
+    /// <summary>The Fly button started X-Plane: the window gets out of its way.</summary>
+    public event EventHandler? XPlaneStarted;
+
+    /// <summary>X-Plane was running and has quit (checked every few seconds while OrthoStreamXP runs).</summary>
+    public event EventHandler? XPlaneQuit;
+
     /// <summary>X-Plane is installed where the settings say, and not running: one button starts it (and OrthoStreamXP first).</summary>
     public bool ShowFly => Mount.State is MountState.Stopped or MountState.Running && _xplaneProgram is not null && !_xplaneRunning;
 
@@ -103,8 +109,23 @@ internal sealed class HomeViewModel : ObservableObject, IPage
     public ICommand OpenLog { get; }
     public ICommand RestartMount { get; }
 
-    /// <summary>Installs the downloaded version and restarts (only while the streaming is stopped).</summary>
+    /// <summary>Shows the downloaded version's release notes, to install it from there (only while the streaming is stopped).</summary>
     public ICommand InstallUpdate { get; }
+
+    /// <summary>The person asked to install the downloaded version: the window shows its notes and asks to confirm.</summary>
+    public event EventHandler<UpdateOffer>? UpdateOffered;
+
+    private void OfferUpdate()
+    {
+        if (_updates.ReadyVersion is not { } version) return;
+        UpdateOffered?.Invoke(this, new UpdateOffer(version, _updates.CurrentVersion, ReleaseNotes.Parse(_updates.ReadyNotes), AppUpdates.ReleasePage(version)));
+    }
+
+    /// <summary>Installs the downloaded version and restarts, once confirmed; not while the scenery streams.</summary>
+    public void InstallConfirmedUpdate()
+    {
+        if (Mount.State == MountState.Stopped) _updates.ApplyAndRestart();
+    }
     public ICommand ApplyReview { get; }
     public ICommand DismissReview { get; }
 
@@ -366,12 +387,14 @@ internal sealed class HomeViewModel : ObservableObject, IPage
 
     private string? _xplaneProgram;
     private bool _xplaneRunning;
+    private readonly XPlaneWatch _xplaneWatch = new();
 
     /// <summary>Notes where X-Plane is installed and whether it runs (on start-up and every few seconds).</summary>
     private void CheckXPlane()
     {
         _xplaneProgram = SystemCheck.XPlaneProgram(SettingsDocument.Load(SettingsDocument.DefaultPath).Get("xplane"));
         _xplaneRunning = SystemCheck.IsXPlaneRunning();
+        if (_xplaneWatch.QuitSince(_xplaneRunning)) XPlaneQuit?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>OrthoStreamXP first (X-Plane looks for scenery only when it starts), then X-Plane.</summary>
@@ -405,6 +428,7 @@ internal sealed class HomeViewModel : ObservableObject, IPage
             _xplaneProblem = new Notice(Severity.Error, "X-Plane could not be started", $"{ex.Message} Start it yourself; the photo scenery is ready for it.");
         }
         Update();
+        if (_xplaneProblem is null) XPlaneStarted?.Invoke(this, EventArgs.Empty);
     }
 
     private Notice? _xplaneProblem;
@@ -626,8 +650,8 @@ internal sealed class HomeViewModel : ObservableObject, IPage
         if (_updates.ReadyVersion is { } version)
             notices.Add(Mount.State == MountState.Stopped
                 ? new Notice(Severity.Info, $"OrthoStreamXP {version} is ready to install",
-                    $"A new version was downloaded (you have {_updates.CurrentVersion}). OrthoStreamXP restarts to install it; your settings, cache and flight history stay.",
-                    "Update and restart", InstallUpdate)
+                    $"A new version was downloaded (you have {_updates.CurrentVersion}). See what's new and install it when you choose; your settings, cache and flight history stay.",
+                    "Update…", InstallUpdate)
                 : new Notice(Severity.Info, $"OrthoStreamXP {version} is ready to install",
                     $"A new version was downloaded (you have {_updates.CurrentVersion}). Stop the streaming when you have finished flying, and install it from here."));
         if (_xplaneProblem is not null) notices.Add(_xplaneProblem);

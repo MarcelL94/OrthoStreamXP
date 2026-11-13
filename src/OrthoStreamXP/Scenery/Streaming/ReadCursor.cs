@@ -14,6 +14,12 @@ internal sealed class ReadCursor
     /// <summary>Where the latest read on this handle ended: a read starting there is the next piece of the same read.</summary>
     public long LastEnd { get; set; } = -1;
 
+    /// <summary>
+    /// The latest level X-Plane wanted on this handle was kept to the low-zoom base at night: the next pieces of the
+    /// same read are counted with it, as night reads, not as stand-ins.
+    /// </summary>
+    public bool KeptToBase { get; set; }
+
     public bool TryGet(int mip, out ReadOnlyMemory<byte> bytes, out Served kind)
     {
         lock (_levels)

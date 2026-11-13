@@ -17,6 +17,11 @@ namespace OrthoStreamXP.Scenery;
 /// make X-Plane treat the texture as final. Level 0 complete is saved as a normal cached DDS (served as a plain
 /// file from then on); coarser real chains are saved under .xpstream\mips; the low-zoom base holds the tiles.
 /// </para>
+/// <para>
+/// With the photos skipped at night (<see cref="PhotosPaused"/>), nothing finer than the low-zoom base is fetched
+/// while the sun in X-Plane is below <see cref="Daylight.DarkBelow"/> (skip-photos-sun-below): X-Plane's reads and load-ahead alike get the
+/// base, stretched, and what is already cached is served as it is. In twilight the photos stream as usual.
+/// </para>
 /// </summary>
 internal sealed class TextureStreamer : IDisposable
 {
@@ -41,12 +46,17 @@ internal sealed class TextureStreamer : IDisposable
     private readonly WeightedPriorityGate _ahead;
     private readonly PagingMeasurements _paging = new();
     private readonly ReadWaitStats _waitStats = new();
+    /// <summary>X-Plane's sun when the photos are skipped at night; null streams them whatever the time.</summary>
+    private readonly Daylight? _nightPause;
     private long _ramBytes;
     private int _trimming;
-    private long _reads, _real, _standIn, _flat, _headerChunks, _readBuilds, _aheadBuilds, _fullBuilds, _failedBuilds;
+    private long _reads, _real, _standIn, _flat, _headerChunks, _readBuilds, _aheadBuilds, _fullBuilds, _failedBuilds, _nightReads;
 
-    public TextureStreamer(SceneryRoots roots, TextureBuilder builder, ViewTracker view, PagingModel model, StreamingOptions options)
+    /// <param name="nightPause">X-Plane's sun, to skip the photos at night (only the low-zoom base); null streams them always.</param>
+    public TextureStreamer(SceneryRoots roots, TextureBuilder builder, ViewTracker view, PagingModel model, StreamingOptions options,
+        Daylight? nightPause = null)
     {
+        _nightPause = nightPause;
         _roots = roots;
         _builder = builder;
         _view = view;
@@ -79,6 +89,9 @@ internal sealed class TextureStreamer : IDisposable
     public static long BuildWeight(int sizePx) => (long)sizePx * sizePx * 9 / 2;
 
     public PagingModel Model => _model;
+
+    /// <summary>Night in X-Plane with the photos skipped at night: nothing finer than the low-zoom base is fetched now.</summary>
+    public bool PhotosPaused => _nightPause?.Dark == true;
 
     /// <summary>Reads of texture data answered (not counting header-only reads).</summary>
     public long Reads => Interlocked.Read(ref _reads);
@@ -155,6 +168,7 @@ internal sealed class TextureStreamer : IDisposable
         Band? band = null;
         double? distance = null;
         double waitedMs = 0;
+        bool keptToBase = false;
         if (wanted is int mip)
         {
             // Full detail wanted: the texture is next to the aircraft, which places it before X-Plane sends a position.
@@ -171,9 +185,12 @@ internal sealed class TextureStreamer : IDisposable
                 Probe(t);
                 realFrom = t.RealFrom;
             }
-            if (mip < realFrom)
+            // At night with the photos skipped, the low-zoom base is the finest level fetched: finer ones are stretched from it.
+            keptToBase = cursor.KeptToBase = mip < t.BaseMip && PhotosPaused;
+            int target = keptToBase ? t.BaseMip : mip;
+            if (target < realFrom)
             {
-                Task<bool> build = StartBuild(t, Math.Min(mip, t.BaseMip), band switch
+                Task<bool> build = StartBuild(t, Math.Min(target, t.BaseMip), band switch
                 {
                     Band.Near => FetchPriority.NearRead,
                     Band.Middle => FetchPriority.ForRead(mip),
@@ -193,15 +210,14 @@ internal sealed class TextureStreamer : IDisposable
                     bool done = build.Wait(TimeSpan.FromSeconds(wait));
                     TimeSpan waited = Stopwatch.GetElapsedTime(waitStarted);
                     waitedMs = waited.TotalMilliseconds;
-                    _waitStats.Record(band!.Value, starting, waited, done);
-                    if (done) _waitStats.NoteNeeded(starting, waited);
-                    else _ = build.ContinueWith(b =>
-                    {
-                        if (b.IsCompletedSuccessfully && b.Result) _waitStats.NoteNeeded(starting, Stopwatch.GetElapsedTime(waitStarted));
-                    }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                    // A wait for the base at night says nothing about how long the photos take: the tuning never sees it.
+                    if (!keptToBase) NoteWait(band!.Value, starting, waitStarted, waited, done, build);
                 }
             }
         }
+
+        // The next piece of a read kept to the base at night is counted with it.
+        else if (!headerChunk) keptToBase = cursor.KeptToBase;
 
         // A level X-Plane is not reading (the header chunk's start of level 0, or the tail before the level it wants)
         // is filled from the best data at hand; it neither fixes the level's version nor counts in the statistics.
@@ -230,13 +246,33 @@ internal sealed class TextureStreamer : IDisposable
             Interlocked.Increment(ref _headerChunks);
             return new ReadAnswer(output.Length, first, last, Served: any);
         }
-        Interlocked.Increment(ref _reads);
-        if (served == Served.Real) Interlocked.Increment(ref _real);
-        else if (served == Served.StandIn) Interlocked.Increment(ref _standIn);
-        else Interlocked.Increment(ref _flat);
+        // A read kept to the base at night is blurry by choice: counted apart, so the Home page's share of real reads,
+        // the flight report and the tuning see only the reads that wanted the photo.
+        if (keptToBase && served != Served.Real) Interlocked.Increment(ref _nightReads);
+        else
+        {
+            Interlocked.Increment(ref _reads);
+            if (served == Served.Real) Interlocked.Increment(ref _real);
+            else if (served == Served.StandIn) Interlocked.Increment(ref _standIn);
+            else Interlocked.Increment(ref _flat);
+        }
         TrimIfNeeded();
         return new ReadAnswer(output.Length, first, last, band, served, waitedMs, distance, wanted);
     }
+
+    /// <summary>How long a read waited for its level, and how long its picture took when the wait ran out first.</summary>
+    private void NoteWait(Band band, bool starting, long waitStarted, TimeSpan waited, bool done, Task<bool> build)
+    {
+        _waitStats.Record(band, starting, waited, done);
+        if (done) _waitStats.NoteNeeded(starting, waited);
+        else _ = build.ContinueWith(b =>
+        {
+            if (b.IsCompletedSuccessfully && b.Result) _waitStats.NoteNeeded(starting, Stopwatch.GetElapsedTime(waitStarted));
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+
+    /// <summary>X-Plane's reads at night that got the low-zoom base, stretched, because the photos were skipped.</summary>
+    public long NightReads => Interlocked.Read(ref _nightReads);
 
     /// <summary>
     /// The band of a read of <paramref name="mip"/>. The level X-Plane asks for is its own verdict on the distance;
@@ -596,8 +632,11 @@ internal sealed class TextureStreamer : IDisposable
     public Task<bool>? Warm(VirtualPath path, int k, int priority, PrefetchMeter? meter = null)
     {
         if (Get(path) is not { } t) return null;
+        // At night a texture with its base has all load-ahead may fetch: nothing to ask for (the warmer rechecks every
+        // loaded texture at each position, which would count each of them again and again).
+        if (k < t.BaseMip && PhotosPaused && RealFrom(t) <= t.BaseMip) return Task.FromResult(true);
         Interlocked.Increment(ref _warmRequests);
-        return StartBuild(t, Math.Clamp(k, 0, t.BaseMip), priority, byRead: false, meter);
+        return StartBuild(t, Math.Clamp(k, PhotosPaused ? t.BaseMip : 0, t.BaseMip), priority, byRead: false, meter);
     }
 
     private long _warmRequests;
@@ -721,7 +760,8 @@ internal sealed class TextureStreamer : IDisposable
                $"{RealReads} real{Share(RealReads)}, {Interlocked.Read(ref _standIn)} with stand-ins{Share(Interlocked.Read(ref _standIn))}, " +
                $"{Interlocked.Read(ref _flat)} flat{Share(Interlocked.Read(ref _flat))}; waited: {_waitStats.Describe(Band.Near)}, {_waitStats.Describe(Band.Middle)}; " +
                $"builds: {Interlocked.Read(ref _readBuilds)} for reads, {Interlocked.Read(ref _aheadBuilds)} ahead ({Interlocked.Read(ref _warmRequests)} asked), " +
-               $"{Interlocked.Read(ref _fullBuilds)} at full detail, {Interlocked.Read(ref _failedBuilds)} failed; RAM {Interlocked.Read(ref _ramBytes) >> 20} MB{k}";
+               $"{Interlocked.Read(ref _fullBuilds)} at full detail, {Interlocked.Read(ref _failedBuilds)} failed" +
+               (_nightPause is null ? "" : $", {Interlocked.Read(ref _nightReads)} reads at night kept to the low-zoom base") + $"; RAM {Interlocked.Read(ref _ramBytes) >> 20} MB{k}";
     }
 
     /// <summary>A number that changes whenever the summary would.</summary>
