@@ -307,6 +307,34 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
         _ => $"{GroundDetail:0} %",
     };
 
+    /// <summary>Street lamps and lit windows on the photo scenery at night.</summary>
+    public bool NightLightsOn
+    {
+        get => _document.GetBool("night-lights") == true;
+        set
+        {
+            Save("night-lights", value ? "on" : "off");
+            Raise();
+            Raise(nameof(NightLightsOnText));
+        }
+    }
+
+    public string NightLightsOnText => NightLightsOn ? "On" : "Off";
+
+    /// <summary>No detailed photos downloaded at night in X-Plane: the ground under the lights is blurry.</summary>
+    public bool SkipPhotosAtNight
+    {
+        get => _document.GetBool("skip-photos-at-night") == true;
+        set
+        {
+            Save("skip-photos-at-night", value ? "on" : "off");
+            Raise();
+            Raise(nameof(SkipPhotosAtNightText));
+        }
+    }
+
+    public string SkipPhotosAtNightText => SkipPhotosAtNight ? "On" : "Off";
+
     public string XPlaneFolder
     {
         get => _xplane;
@@ -482,7 +510,7 @@ internal sealed class SettingsViewModel : ObservableObject, IPage
                  {
                      nameof(Provider), nameof(DownloadWorkers), nameof(DownloadWorkersText), nameof(FilePath), nameof(CacheEstimate),
                      nameof(MatchColoursOn), nameof(MatchColoursOnText), nameof(MatchStrength), nameof(MatchStrengthText), nameof(SeasonsOn), nameof(SeasonsOnText), nameof(Season), nameof(SeasonStrength), nameof(SeasonStrengthText), nameof(Exposure), nameof(ExposureText),
-                     nameof(GroundDetail), nameof(GroundDetailText),
+                     nameof(GroundDetail), nameof(GroundDetailText), nameof(NightLightsOn), nameof(NightLightsOnText), nameof(SkipPhotosAtNight), nameof(SkipPhotosAtNightText),
                      nameof(TunedRows), nameof(TuningText), nameof(CanReset), nameof(ResetQuestion),
                  })
             Raise(name);

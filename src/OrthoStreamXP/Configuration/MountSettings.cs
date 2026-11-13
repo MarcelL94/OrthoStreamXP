@@ -42,6 +42,12 @@ internal sealed record MountSettings
     public bool LazyTerrainListing { get; init; }
     /// <summary>How strong X-Plane's detail decals are on the photo terrain, 0 (left out) to 100 percent (as the packages define).</summary>
     public int GroundDetail { get; init; }
+    /// <summary>The photo tiles get night textures: street lamps and lit windows along X-Plane's roads.</summary>
+    public bool NightLights { get; init; }
+    /// <summary>At night in X-Plane only the low-zoom base is downloaded: no detailed photos under the night lights.</summary>
+    public bool SkipPhotosAtNight { get; init; }
+    /// <summary>How far below the horizon, in degrees, the sun must be before the photos are skipped (0-18).</summary>
+    public double SkipPhotosSunBelow { get; init; } = -Scenery.Daylight.DefaultDarkBelow;
     /// <summary>A texture-quality value from an older settings file: no longer used, noted in the log.</summary>
     public string? IgnoredTextureQuality { get; init; }
     /// <summary>Photo textures are served level by level as X-Plane reads them (off: built whole first).</summary>
@@ -141,6 +147,12 @@ internal sealed record MountSettings
         bool readLog = ParseOnOff(readLogValue) ?? throw new SettingsException($"read-log must be on or off, not '{readLogValue}'");
         int groundDetail = values.Int("ground-detail", 0);
         if (groundDetail is < 0 or > Scenery.TerrainDecals.Full) throw new SettingsException("ground-detail must be between 0 and 100");
+        string nightValue = values.String("night-lights") ?? "off";
+        bool nightLights = ParseOnOff(nightValue) ?? throw new SettingsException($"night-lights must be on or off, not '{nightValue}'");
+        string skipValue = values.String("skip-photos-at-night") ?? "off";
+        bool skipPhotosAtNight = ParseOnOff(skipValue) ?? throw new SettingsException($"skip-photos-at-night must be on or off, not '{skipValue}'");
+        double skipSunBelow = values.Double("skip-photos-sun-below", -Scenery.Daylight.DefaultDarkBelow);
+        if (skipSunBelow is < 0 or > 18) throw new SettingsException("skip-photos-sun-below must be between 0 and 18 degrees");
 
         if (downloadWorkers < 1) throw new SettingsException("download-workers must be at least 1");
         if (downloadTimeout is < 1 or > 120) throw new SettingsException("download-timeout must be between 1 and 120 seconds");
@@ -193,6 +205,9 @@ internal sealed record MountSettings
             TextureStore = textureStore,
             LazyTerrainListing = values.Flag("lazy-terrain-listing"),
             GroundDetail = groundDetail,
+            NightLights = nightLights,
+            SkipPhotosAtNight = skipPhotosAtNight,
+            SkipPhotosSunBelow = skipSunBelow,
             IgnoredTextureQuality = values.String("texture-quality"),
             MipStreaming = mipStreaming,
             NearWait = nearWait,

@@ -174,6 +174,9 @@ public sealed class WindowSettingsTests : IDisposable
         Assert.Equal(["Quality", "Seasons", "Tuned settings"], names);
         Assert.Equal("Quality, Seasons and Tuned settings", SettingNames.List(names));
         Assert.Equal("Quality", SettingNames.List(["Quality"]));
+        // The Night tab comes after Colours and before Other.
+        Assert.Equal(["Exposure", "Night lights", "Photos at night", "X-Plane address"],
+            SettingNames.Of(["xplane-address", "skip-photos-sun-below", "skip-photos-at-night", "night-lights", "exposure"]));
     }
 
     [Fact]

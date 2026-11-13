@@ -3,8 +3,11 @@ using OrthoStreamXP.Textures;
 
 namespace OrthoStreamXP.Scenery;
 
-/// <summary>What a path opens as: a backing file, a photo texture streamed level by level, or a terrain definition made in memory.</summary>
-internal readonly record struct OverlayEntry(string? Backing, StreamedTexture? Streamed, byte[]? Content = null);
+/// <summary>
+/// What a path opens as: a backing file, a photo texture streamed level by level, a terrain definition made in memory,
+/// or a night texture painted as X-Plane reads it.
+/// </summary>
+internal readonly record struct OverlayEntry(string? Backing, StreamedTexture? Streamed, byte[]? Content = null, NightTexture? Night = null);
 
 /// <summary>
 /// Resolves a virtual path to what X-Plane reads: the cache overlays the source package, terrain definitions
@@ -19,6 +22,7 @@ internal sealed class SceneryOverlay
     private readonly SceneryRoots _roots;
     private readonly TerrainDefinitions _terrain;
     private readonly TerrainDecals? _decals;
+    private readonly NightTextures? _night;
     private readonly TextureScheduler? _textures;
     private readonly TextureStreamer? _streamer;
     private readonly TextureCatalog? _catalog;
@@ -31,12 +35,14 @@ internal sealed class SceneryOverlay
     /// <param name="catalog">Learns the loaded scenery's textures from the terrain definitions X-Plane opens (for prefetch).</param>
     /// <param name="streamer">Serves photo textures level by level instead of building them whole (then <paramref name="textures"/> is null).</param>
     /// <param name="decals">X-Plane's detail decals at the chosen strength; null keeps them as the package defines.</param>
+    /// <param name="night">The photo tiles' night textures; null leaves the tiles without night lights.</param>
     public SceneryOverlay(SceneryRoots roots, TextureScheduler? textures, bool lazyTerrainListing, TextureCatalog? catalog = null,
-        TextureStreamer? streamer = null, TerrainDecals? decals = null)
+        TextureStreamer? streamer = null, TerrainDecals? decals = null, NightTextures? night = null)
     {
         _roots = roots;
         _decals = decals;
-        _terrain = new TerrainDefinitions(roots, decals);
+        _night = night;
+        _terrain = new TerrainDefinitions(roots, decals, nightLights: night is not null);
         _textures = textures;
         _streamer = streamer;
         _catalog = catalog;
@@ -48,6 +54,8 @@ internal sealed class SceneryOverlay
     }
 
     public TextureStreamer? Streamer => _streamer;
+
+    public NightTextures? Night => _night;
 
     public OverlayEntry Open(string fileName) => Open(VirtualPath.Parse(fileName));
 
@@ -62,6 +70,8 @@ internal sealed class SceneryOverlay
     {
         // The faded decal textures the photo terrain definitions point at.
         if (_decals?.Texture(path) is { } decal) return new OverlayEntry(null, null, decal);
+        // The photo tiles' night textures, painted the first time X-Plane opens them.
+        if (_night?.Open(path) is { } night) return night;
         if (_terrain.Resolve(path) is { } definition)
         {
             LogRequest(path);

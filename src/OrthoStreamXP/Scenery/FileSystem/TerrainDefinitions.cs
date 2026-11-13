@@ -16,7 +16,10 @@ namespace OrthoStreamXP.Scenery;
 /// X-Plane's detail decals at the chosen strength (see <see cref="TerrainDecals"/>): the photo tiles' decal lines
 /// are faded, left out or kept. Null keeps them as the package defines.
 /// </param>
-internal sealed partial class TerrainDefinitions(SceneryRoots roots, TerrainDecals? decals)
+/// <param name="nightLights">
+/// Land photo tiles name their night texture (<see cref="NightTextures.TerrainLine"/>); water and sea overlays never do.
+/// </param>
+internal sealed partial class TerrainDefinitions(SceneryRoots roots, TerrainDecals? decals, bool nightLights = false)
 {
     private const string WaterOverlaySuffix = "_water_overlay.ter", SeaOverlaySuffix = "_sea_overlay.ter";
     private const string DecalLibrary = "lib/g10/decals/maquify_2_green_key.dcl";
@@ -89,17 +92,18 @@ internal sealed partial class TerrainDefinitions(SceneryRoots roots, TerrainDeca
     /// <summary>
     /// The source definition with its LOAD_CENTER pixel size set to its texture's size (LOAD_CENTER_BORDER is kept).
     /// A definition without LOAD_CENTER gets one after its TERRAIN line: without it X-Plane loads the texture once,
-    /// at full size, and never reads it again as the distance changes. Its decals are set to the chosen strength.
+    /// at full size, and never reads it again as the distance changes. Its decals are set to the chosen strength, and
+    /// a land tile names its night texture when the night lights are on.
     /// </summary>
     private string? Adjusted(VirtualPath path, string original)
     {
         // Not a tile name: its texture is not built here, so the definition is served as it is.
-        if (TextureOf(path.Name, out _, out _) is not { } name) return null;
+        if (TextureOf(path.Name, out bool isWaterOverlay, out bool isSeaOverlay) is not { } name) return null;
         int size = roots.Textures.SizeFor(name.Zoom);
         string content = File.ReadAllText(original, Encoding.UTF8).ReplaceLineEndings("\n");
-        string withDecals = WithDecals(content);
-        bool decalsChanged = withDecals != content;
-        content = withDecals;
+        string withLines = isWaterOverlay || isSeaOverlay ? WithDecals(content) : WithNight(WithDecals(content), name);
+        bool linesChanged = withLines != content;
+        content = withLines;
         int count = 0;
         string updated = LoadCenterPattern().Replace(content, m =>
         {
@@ -108,7 +112,7 @@ internal sealed partial class TerrainDefinitions(SceneryRoots roots, TerrainDeca
         });
         if (count > 0) return updated;
         Match terrain = TerrainLinePattern().Match(content);
-        if (!terrain.Success) return decalsChanged ? content : null;
+        if (!terrain.Success) return linesChanged ? content : null;
         Log.Detail($"{path.Display} has no LOAD_CENTER; one is added so X-Plane loads its texture by distance");
         return content.Insert(terrain.Index + terrain.Length, $"\nLOAD_CENTER {LoadCenter(name)} {size.ToString(CultureInfo.InvariantCulture)}");
     }
@@ -160,8 +164,27 @@ internal sealed partial class TerrainDefinitions(SceneryRoots roots, TerrainDeca
         }
         if (isWaterOverlay || isSeaOverlay)
             return definition.Append("BORDER_TEX ../textures/water_transition.png\nWET\nNO_SHADOW\n").ToString();
+        if (nightLights) definition.Append(NightTextures.TerrainLine(name)).Append('\n');
         definition.Append(CultureInfo.InvariantCulture, $"DECAL_LIB {DecalLibrary}\n").Append("NO_ALPHA\n");
         return WithDecals(definition.ToString());
+    }
+
+    /// <summary>A base texture line (BASE_TEX or BASE_TEX_NOWRAP and its path), without its line break.</summary>
+    [GeneratedRegex(@"^[ \t]*BASE_TEX(?:_NOWRAP)?[ \t]+\S[^\n]*$", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
+    private static partial Regex BaseTexturePattern();
+
+    [GeneratedRegex(@"^[ \t]*LIT_TEX", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
+    private static partial Regex LitTexturePattern();
+
+    /// <summary>
+    /// A land photo tile's definition naming its night texture right after its photo. One that names a night texture of
+    /// its own, or has no base texture line, is left as it is.
+    /// </summary>
+    private string WithNight(string content, TextureName name)
+    {
+        if (!nightLights || LitTexturePattern().IsMatch(content)) return content;
+        Match photo = BaseTexturePattern().Match(content);
+        return photo.Success ? content.Insert(photo.Index + photo.Length, "\n" + NightTextures.TerrainLine(name)) : content;
     }
 
     /// <summary>
